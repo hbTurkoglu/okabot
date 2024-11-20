@@ -3,9 +3,10 @@
 #include <RF24.h>
 
 
-#define CE_PIN 9
+#define CE_PIN 9//anten pinleri sck= 13 mosi = 11  miso = 12 digital
 #define CSN_PIN 10
-#define VRX_PIN_GAS 0
+
+#define VRX_PIN_GAS 0//joystick pinleri analog
 #define VRY_PIN_GAS 1
 #define VRX_PIN_STR 2 
 #define VRY_PIN_STR 3
