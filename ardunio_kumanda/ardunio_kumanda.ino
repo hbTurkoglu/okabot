@@ -1,36 +1,65 @@
+//NOT: Kod şu anlık küçük test arabası için optimizedir.
+
+
+//Kütüphaneler.
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
 
+#define DEBUG_MODE true
 
+// NRF24L01 tanımlamaları
 #define CE_PIN 9//anten pinleri sck= 13 mosi = 11  miso = 12 digital
 #define CSN_PIN 10
 
+//Joystick tanımlamaları.
 #define VRX_PIN_GAS 0//joystick pinleri analog
 #define VRY_PIN_GAS 1
 #define VRX_PIN_STR 2 
 #define VRY_PIN_STR 3
-
 #define DEADZONE 15
 
-int xValueGas = 0;
-int yValueGas = 0;
-int xValueStr = 0;
-int yValueStr = 0;
 
-int prev_xValueGas = 0;
-int prev_yValueGas = 0;
-int prev_xValueStr = 0;
-int prev_yValueStr = 0;
+//Joystick değişkenleri.
+byte xValueGas = 0;
+byte yValueGas = 0;
+byte xValueStr = 0;
+byte yValueStr = 0;
 
+byte prev_xValueGas = 0;
+byte prev_yValueGas = 0;
+byte prev_xValueStr = 0;
+byte prev_yValueStr = 0;
+
+
+//Objeler.
 RF24 radio(CE_PIN,CSN_PIN);
+
+
 const byte address[6] = "00001";
+
+byte data[4];
 
 
 void setup() 
 {
-  Serial.begin(9600);
+  #if DEBUG_MODE
+    Serial.begin(9600);
+  #endif
 
+
+  startRadio();
+}
+
+void loop()
+{
+  sendData();
+  
+}
+
+
+void startRadio()
+{
   radio.begin();
   radio.setDataRate(RF24_250KBPS);
   radio.openWritingPipe(address);
@@ -38,39 +67,40 @@ void setup()
   radio.stopListening();
 }
 
-void loop()
- {
+
+void sendData()
+{
     xValueGas = analogRead(VRX_PIN_GAS);
     yValueGas = analogRead(VRY_PIN_GAS);
     xValueStr = analogRead(VRX_PIN_STR);
     yValueStr = analogRead(VRY_PIN_STR);
- 
-    int message[4] = {};
-    message[0] = xValueGas;
-    message[1] = yValueGas;
-    message[2] = xValueStr;
-    message[3] = yValueStr;
 
-    if (abs(xValueGas - prev_xValueGas) > DEADZONE || abs(yValueGas -prev_yValueGas) > DEADZONE ||
-       abs(xValueStr - prev_xValueStr)  > DEADZONE|| abs(yValueGas - prev_yValueGas) > DEADZONE) 
-      {
-      Serial.print("xg =");
-      Serial.println(message[0]);
-      Serial.print("yg=");
-      Serial.println(message[1]);
-      Serial.print("xs =");
-      Serial.println(message[2]);
-      Serial.print("ys=");
-      Serial.println(message[3]);
-      radio.write(&message,sizeof(message));
-      }
+    if (abs(xValueGas - prev_xValueGas) > DEADZONE || abs(yValueGas - prev_yValueGas) > DEADZONE ||
+        abs(xValueStr - prev_xValueStr)  > DEADZONE|| abs(yValueGas - prev_yValueGas) > DEADZONE)
+    {
+      data[0] = xValueGas;
+      data[1] = yValueGas;
+      data[2] = xValueStr;
+      data[3] = yValueStr;
+
+      radio.write(&data, sizeof(data));
+
+      
+      #if DEBUG_MODE
+        Serial.print("xg = ");
+        Serial.println(data[0]);
+        Serial.print("yg = ");
+        Serial.println(data[1]);
+        Serial.print("xs = ");
+        Serial.println(data[2]);
+        Serial.print("ys = ");
+        Serial.println(data[3]);
+        Serial.println("\n");
+      #endif
+    }
 
     prev_xValueGas = xValueGas;
     prev_yValueGas = yValueGas;
     prev_xValueStr = xValueStr;
     prev_yValueStr = yValueStr;
-
-    delay(1000);
-  
-
 }
