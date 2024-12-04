@@ -1,3 +1,5 @@
+
+
 //NOT: Kod şu anlık küçük test arabası için optimizedir.
 
 
@@ -5,6 +7,7 @@
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
+#include <LCD_I2C.h>
 
 #define DEBUG_MODE true
 
@@ -31,10 +34,14 @@ byte prev_yValueGas = 0;
 byte prev_xValueStr = 0;
 byte prev_yValueStr = 0;
 
+unsigned long startMillis;
+unsigned long currentMillis;
+const unsigned long lcdScreenPeriod = 1000;
+
 
 //Objeler.
 RF24 radio(CE_PIN,CSN_PIN);
-
+LCD_I2C lcd(0x27, 16, 2);
 
 const byte address[6] = "00001";
 
@@ -46,15 +53,18 @@ void setup()
   #if DEBUG_MODE
     Serial.begin(9600);
   #endif
-
+  lcd.begin();
+               
+  lcd.backlight();
 
   startRadio();
+
+  startMillis = millis();
 }
 
 void loop()
 {
   sendData();
-  
 }
 
 
@@ -74,6 +84,19 @@ void sendData()
     yValueGas = analogRead(VRY_PIN_GAS);
     xValueStr = analogRead(VRX_PIN_STR);
     yValueStr = analogRead(VRY_PIN_STR);
+
+
+    currentMillis = millis();
+    if (currentMillis - startMillis >= lcdScreenPeriod)
+    {
+    lcd.setCursor(5, 1); 
+    lcd.print(xValueGas);
+    lcd.setCursor(5, 2); 
+    lcd.print(yValueGas);
+    startMillis = currentMillis;
+    }
+
+
 
     if (abs(xValueGas - prev_xValueGas) > DEADZONE || abs(yValueGas - prev_yValueGas) > DEADZONE ||
         abs(xValueStr - prev_xValueStr)  > DEADZONE|| abs(yValueGas - prev_yValueGas) > DEADZONE)
