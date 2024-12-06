@@ -36,7 +36,7 @@ byte prev_yValueStr = 0;
 
 unsigned long startMillis;
 unsigned long currentMillis;
-const unsigned long lcdScreenPeriod = 1000;
+const unsigned long lcdScreenPeriod = 500;
 
 
 //Objeler.
@@ -53,8 +53,7 @@ void setup()
   #if DEBUG_MODE
     Serial.begin(9600);
   #endif
-  lcd.begin();
-               
+  lcd.begin();               
   lcd.backlight();
 
   startRadio();
@@ -89,10 +88,18 @@ void sendData()
     currentMillis = millis();
     if (currentMillis - startMillis >= lcdScreenPeriod)
     {
-    lcd.setCursor(5, 1); 
+    lcd.setCursor(0, 1);
+    lcd.print ("xg=");
     lcd.print(xValueGas);
-    lcd.setCursor(5, 2); 
+    lcd.setCursor(0, 2); 
+    lcd.print("yg=");
     lcd.print(yValueGas);
+    lcd.setCursor(9, 1);
+    lcd.print ("xs=");
+    lcd.print(xValueStr);
+    lcd.setCursor(9, 2); 
+    lcd.print ("ys=");
+    lcd.print(yValueStr);
     startMillis = currentMillis;
     }
 
