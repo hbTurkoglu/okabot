@@ -1,7 +1,0 @@
-{
-    "configuration": "cpu=atmega328",
-    "board": "arduino:avr:nano",
-    "programmer": "arduinoisp",
-    "port": "COM1",
-    "sketch": "receiver\\receiver.ino"
-}
