@@ -8,6 +8,7 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 #include <LCD_I2C.h>
+#include <Ticker.h>
 
 #define DEBUG_MODE true
 
@@ -34,9 +35,11 @@ byte prev_yValueGas = 0;
 byte prev_xValueStr = 0;
 byte prev_yValueStr = 0;
 
-unsigned long startMillis;
-unsigned long currentMillis;
-const unsigned long lcdScreenPeriod = 500;
+
+//Ticker
+int lcdUpdateFreq = 200;
+void updateLcd();
+Ticker lcdTask(updateLcd, lcdUpdateFreq);
 
 
 //Objeler.
@@ -53,17 +56,18 @@ void setup()
   #if DEBUG_MODE
     Serial.begin(9600);
   #endif
+
   lcd.begin();               
   lcd.backlight();
+  lcdTask.start();
 
   startRadio();
-
-  startMillis = millis();
 }
 
 void loop()
 {
   sendData();
+  lcdTask.update();
 }
 
 
@@ -77,31 +81,29 @@ void startRadio()
 }
 
 
+void updateLcd()
+{
+  lcd.setCursor(0, 0);
+  lcd.print ("xg= ");
+  lcd.print(xValueGas);
+  lcd.setCursor(0, 1); 
+  lcd.print("yg= ");
+  lcd.print(yValueGas);
+  lcd.setCursor(9, 0);
+  lcd.print ("xs= ");
+  lcd.print(xValueStr);
+  lcd.setCursor(9, 1); 
+  lcd.print ("ys= ");
+  lcd.print(yValueStr);
+}
+
+
 void sendData()
 {
     xValueGas = analogRead(VRX_PIN_GAS);
     yValueGas = analogRead(VRY_PIN_GAS);
     xValueStr = analogRead(VRX_PIN_STR);
     yValueStr = analogRead(VRY_PIN_STR);
-
-
-    currentMillis = millis();
-    if (currentMillis - startMillis >= lcdScreenPeriod)
-    {
-    lcd.setCursor(0, 0);
-    lcd.print ("xg=");
-    lcd.print(xValueGas);
-    lcd.setCursor(0, 1); 
-    lcd.print("yg=");
-    lcd.print(yValueGas);
-    lcd.setCursor(9, 0);
-    lcd.print ("xs=");
-    lcd.print(xValueStr);
-    lcd.setCursor(9, 1); 
-    lcd.print ("ys=");
-    lcd.print(yValueStr);
-    startMillis = currentMillis;
-    }
 
 
 
