@@ -39,7 +39,13 @@
 
 //Görevler
 void adjustInputs();
-Ticker inputLoop(adjustInputs, ADJUSTING_FREQ); //Girişleri oku
+Ticker inputAdjustTask(adjustInputs, ADJUSTING_FREQ); //Girişleri oku
+
+void emergencyLockdown();
+Ticker emergencyLockdownTask(emergencyLockdown, 1000);
+bool dataReceived = false;
+bool atLockdown = false;
+
 
 //pwm değerleri
 const int pwmFreq = 15000;
@@ -99,15 +105,17 @@ void setup()
   setPins();
   startRadio();
   calibrateJoysticks();
-  inputLoop.start();
+  inputAdjustTask.start();
+  emergencyLockdownTask.start();
 }
 
 
 void loop() 
 {
   getValuesFromRadio();
-  inputLoop.update();
-  driveMotors();
+  emergencyLockdownTask.update();
+  inputAdjustTask.update();
+  if (!atLockdown) {driveMotors();}
 }
 
 
@@ -166,6 +174,8 @@ void getValuesFromRadio()
   if (radio.available()) 
   {
     radio.read(&data, sizeof(data));  //Verileri değişkenlere çek.
+    dataReceived = true; //Veri geldiğini kaydet.
+    atLockdown = false; //Kilidi kapat.
 
     //verileri değişkenlere ata
     xValueGas = data[0];
@@ -236,4 +246,23 @@ void driveMotors()
   determineDirection(determined_yValueStr, pwmChannel_4R, pwmChannel_4L, JIV_yValueStr);
 }
 
+
+void lockMotor(int channel_R, int channel_L)
+{
+  ledcWrite(channel_R, 0); //TODO: Bir anda kilitlenmesin, ders çıkaramadık galiba. En kısa sürede düzenle!!!
+  ledcWrite(channel_L, 0);
+}
+
+void emergencyLockdown()
+{
+  if (!dataReceived)
+  {
+    atLockdown = true;
+    lockMotor(pwmChannel_1R, pwmChannel_1L);
+    lockMotor(pwmChannel_2R, pwmChannel_2L);
+    lockMotor(pwmChannel_3R, pwmChannel_3L);
+    lockMotor(pwmChannel_4R, pwmChannel_4L);
+  }
+  dataReceived = false; //kontrol bool'unu sıfırla  
+}
 

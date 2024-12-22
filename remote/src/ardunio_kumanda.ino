@@ -21,7 +21,6 @@
 #define VRY_PIN_GAS 1
 #define VRX_PIN_STR 2   
 #define VRY_PIN_STR 3
-#define DEADZONE 10
 
 
 //Joystick değişkenleri.
@@ -105,34 +104,23 @@ void sendData()
     xValueStr = analogRead(VRX_PIN_STR);
     yValueStr = analogRead(VRY_PIN_STR);
 
+    data[0] = xValueGas;
+    data[1] = yValueGas;
+    data[2] = xValueStr;
+    data[3] = yValueStr;
 
+    radio.write(&data, sizeof(data));
 
-    if (abs(xValueGas - prev_xValueGas) > DEADZONE || abs(yValueGas - prev_yValueGas) > DEADZONE ||
-        abs(xValueStr - prev_xValueStr)  > DEADZONE|| abs(yValueGas - prev_yValueGas) > DEADZONE)
-    {
-      data[0] = xValueGas;
-      data[1] = yValueGas;
-      data[2] = xValueStr;
-      data[3] = yValueStr;
-
-      radio.write(&data, sizeof(data));
-
-      
-      #if DEBUG_MODE
-        Serial.print("xg = ");
-        Serial.println(data[0]);
-        Serial.print("yg = ");
-        Serial.println(data[1]);
-        Serial.print("xs = ");
-        Serial.println(data[2]);
-        Serial.print("ys = ");
-        Serial.println(data[3]);
-        Serial.println("\n");
-      #endif
-    }
-
-    prev_xValueGas = xValueGas;
-    prev_yValueGas = yValueGas;
-    prev_xValueStr = xValueStr;
-    prev_yValueStr = yValueStr;
+    
+    #if DEBUG_MODE
+      Serial.print("xg = ");
+      Serial.println(data[0]);
+      Serial.print("yg = ");
+      Serial.println(data[1]);
+      Serial.print("xs = ");
+      Serial.println(data[2]);
+      Serial.print("ys = ");
+      Serial.println(data[3]);
+      Serial.println("\n");
+    #endif
 }
