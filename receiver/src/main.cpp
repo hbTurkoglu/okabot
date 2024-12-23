@@ -249,8 +249,7 @@ void driveMotors()
 
 void lockMotor(int channel_R, int channel_L)
 {
-  ledcWrite(channel_R, 0); //TODO: Bir anda kilitlenmesin, ders çıkaramadık galiba. En kısa sürede düzenle!!!
-  ledcWrite(channel_L, 0);
+  determineDirection(0, channel_R, channel_L, JIV_xValueGas);
 }
 
 void emergencyLockdown()
