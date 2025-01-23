@@ -1,24 +1,26 @@
 
-//NOT: Kod şu anlık küçük test arabası için optimizedir.
-
-
+/*---------------------------------------------------------------------*/
 
 //Kütüphaneler.
+
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
 #include <Ticker.h>
 
+/*---------------------------------------------------------------------*/
 
 #define DEBUG_MODE true
 
 
 // NRF24L01 tanımlamaları
+
 #define CE_PIN 2
 #define CSN_PIN 13
 
 
 //Motor pin tanımlamaları.
+
 #define MOTOR_1_R_PWM 12
 #define MOTOR_1_L_PWM 14
 
@@ -33,21 +35,26 @@
 
 
 //parametreler
-#define ADJUSTING_FREQ 30
-#define ACCELERATION 1
+#define SPEED_ADJUSTING_FREQ 30
+#define FORWARD_ACCELERATION 50
+#define BACKWARD_ACCELERATION 10
 
+/*---------------------------------------------------------------------*/
 
 //Görevler
+
 void adjustInputs();
-Ticker inputAdjustTask(adjustInputs, ADJUSTING_FREQ); //Girişleri oku
+Ticker driveMotorsTask(adjustInputs, SPEED_ADJUSTING_FREQ); //Girişleri oku
 
 void emergencyLockdown();
 Ticker emergencyLockdownTask(emergencyLockdown, 1000);
 bool dataReceived = false;
 bool atLockdown = false;
 
+/*---------------------------------------------------------------------*/
 
 //pwm değerleri
+
 const int pwmFreq = 15000;
 const int pwmResolution = 8;
 
@@ -63,22 +70,16 @@ const int pwmChannel_3L = 5;
 const int pwmChannel_4R = 6;
 const int pwmChannel_4L = 7;
 
-//Gelen veriler
-byte xValueGas = 0;
-byte yValueGas = 0;
-byte xValueStr = 0;
-byte yValueStr = 0;
+byte xValueGas = 0, yValueGas = 0, xValueStr = 0, yValueStr = 0;
 
-byte determined_xValueGas = 0;
-byte determined_yValueGas = 0;
-byte determined_xValueStr = 0;
-byte determined_yValueStr = 0;
-
+byte determined_xValueGas = 0, determined_yValueGas = 0, determined_xValueStr = 0, determined_yValueStr = 0;
 
 byte JIV_xValueGas = 160; //Joystick Idle Value
 byte JIV_yValueGas = 160; //Joystick Idle Value
 byte JIV_xValueStr = 160; //Joystick Idle Value
 byte JIV_yValueStr = 160; //Joystick Idle Value
+
+/*---------------------------------------------------------------------*/
 
 //Objeler.
 RF24 radio(CE_PIN, CSN_PIN);
@@ -87,37 +88,18 @@ RF24 radio(CE_PIN, CSN_PIN);
 const byte address[6] = "00001"; // Haberleşme adresi
 byte data[4];
 
+/*---------------------------------------------------------------------*/
 
 //prototipler
 void startRadio();
 void setPins();
 void getValuesFromRadio();
-void driveMotors();
-void calibrateJoysticks();
+void sendPWM();
+
+/*---------------------------------------------------------------------*/
 
 
-void setup() 
-{
-  #if DEBUG_MODE
-    Serial.begin(9600);
-  #endif
-
-  setPins();
-  startRadio();
-  calibrateJoysticks();
-  inputAdjustTask.start();
-  emergencyLockdownTask.start();
-}
-
-
-void loop() 
-{
-  getValuesFromRadio();
-  emergencyLockdownTask.update();
-  inputAdjustTask.update();
-  if (!atLockdown) {driveMotors();}
-}
-
+//Başlancıç fonksiyonları
 
 void startRadio()
 {
@@ -127,25 +109,6 @@ void startRadio()
   radio.setPALevel(3);  //güç seviyesi, 1-min, 3-max.
   radio.startListening(); // Alıcı moduna geçiş.
 }
-
-
-void calibrateJoysticks()
-{
-  for (int i = 0; i<5; i++) //5 kere dene
-  {
-    if (radio.available())
-    {
-      radio.read(&data, sizeof(data));
-      JIV_xValueGas = data[0];
-      JIV_yValueGas = data[1];
-      JIV_xValueStr = data[2];
-      JIV_yValueStr = data[3];
-      break;
-    }
-    delay(100);
-  }
-}
-
 
 void setPins()
 {
@@ -168,6 +131,37 @@ void setPins()
   ledcAttachPin(MOTOR_4_L_PWM, pwmChannel_4L);
 }
 
+
+/*---------------------------------------------------------------------*/
+
+
+
+//Görev fonksiyonları
+
+void setup() 
+{
+  #if DEBUG_MODE
+    Serial.begin(9600);
+  #endif
+
+  setPins();
+  startRadio();
+  driveMotorsTask.start();
+  //emergencyLockdownTask.start();    geçici olarak devre dışı bırakıldı.
+}
+
+void loop() 
+{
+  getValuesFromRadio();
+  //emergencyLockdownTask.update();   geçici olarak devre dışı bırakıldı.
+  driveMotorsTask.update();
+}
+
+
+/*---------------------------------------------------------------------*/
+
+
+//Döngü fonksiyonları
 
 void getValuesFromRadio()
 {
@@ -198,58 +192,69 @@ void getValuesFromRadio()
 }
 
 
-void smoothlyAdjust(byte& determinedValue, byte currentValue, byte acceleration)
+void smoothInputs(byte& determinedValue, byte currentValue, byte forwardAccel, byte backwardAccel)
 {
-  if (abs(currentValue - determinedValue) > acceleration) 
+  if (abs(currentValue - determinedValue) > backwardAccel) 
   {
     if (currentValue > determinedValue) 
     {
-      determinedValue += acceleration;
+      determinedValue += forwardAccel;
     } 
     else 
     {
-      determinedValue -= acceleration;
+      determinedValue -= backwardAccel;
     }
+  }
+}
+
+void determineDirectionAndSpeed(byte input, int channel_R, int channel_L, int middlePoint)
+{
+  if (input > middlePoint)
+  {
+    ledcWrite(channel_L, 0); // Sol kanalı kapat
+    byte pwmValue = map(input, middlePoint, 255, 0, 255);
+    ledcWrite(channel_R, map(pow(pwmValue, 2), pow(0, 2), pow(255, 2), 0, 255));
+  }
+  else
+  {
+    ledcWrite(channel_R, 0); // Sağ kanalı kapat
+    byte mirroredInput = 2 * middlePoint - input;
+    byte pwmValue = map(mirroredInput, middlePoint, 255, 0, 255);
+    ledcWrite(channel_L, map(pow(pwmValue, 2), pow(0, 2), pow(255, 2), 0, 255));
   }
 }
 
 
 void adjustInputs()
 {
-  smoothlyAdjust(determined_xValueGas, xValueGas, ACCELERATION);
-  smoothlyAdjust(determined_yValueGas, yValueGas, ACCELERATION);
-  smoothlyAdjust(determined_xValueStr, xValueStr, ACCELERATION);
-  smoothlyAdjust(determined_yValueStr, yValueStr, ACCELERATION);
+  smoothInputs(determined_xValueGas, xValueGas, FORWARD_ACCELERATION, BACKWARD_ACCELERATION);
+  smoothInputs(determined_yValueGas, yValueGas, FORWARD_ACCELERATION, BACKWARD_ACCELERATION);
+  smoothInputs(determined_xValueStr, xValueStr, FORWARD_ACCELERATION, BACKWARD_ACCELERATION);
+  smoothInputs(determined_yValueStr, yValueStr, FORWARD_ACCELERATION, BACKWARD_ACCELERATION);
 }
 
-
-void determineDirection(byte input, int channel_R, int channel_L, int middlePoint)
+void sendPWM()
 {
-  if (input > middlePoint)
-  {
-    ledcWrite(channel_L, 0);
-    ledcWrite(channel_R, map(input, middlePoint, 256, 0, 256));
-  }
-  else
-  {
-    ledcWrite(channel_R, 0);
-    ledcWrite(channel_L, map(input, 0, middlePoint, 0, 256));
-  }
+  determineDirectionAndSpeed(determined_xValueGas, pwmChannel_1R, pwmChannel_1L, JIV_xValueGas);
+  determineDirectionAndSpeed(determined_yValueGas, pwmChannel_2R, pwmChannel_2L, JIV_yValueGas);
+  determineDirectionAndSpeed(determined_xValueStr, pwmChannel_3R, pwmChannel_3L, JIV_xValueStr);
+  determineDirectionAndSpeed(determined_yValueStr, pwmChannel_4R, pwmChannel_4L, JIV_yValueStr);
 }
+
 
 
 void driveMotors()
 {
-  determineDirection(determined_xValueGas, pwmChannel_1R, pwmChannel_1L, JIV_xValueGas);
-  determineDirection(determined_yValueGas, pwmChannel_2R, pwmChannel_2L, JIV_yValueGas);
-  determineDirection(determined_xValueStr, pwmChannel_3R, pwmChannel_3L, JIV_xValueStr);
-  determineDirection(determined_yValueStr, pwmChannel_4R, pwmChannel_4L, JIV_yValueStr);
+  adjustInputs();
+  sendPWM();
 }
+
+
 
 
 void lockMotor(int channel_R, int channel_L)
 {
-  determineDirection(0, channel_R, channel_L, JIV_xValueGas);
+  determineDirectionAndSpeed(0, channel_R, channel_L, JIV_xValueGas);
 }
 
 void emergencyLockdown()
