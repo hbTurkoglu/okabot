@@ -35,16 +35,16 @@
 
 
 //parametreler
-#define SPEED_ADJUSTING_FREQ 30
-#define FORWARD_ACCELERATION 50
-#define BACKWARD_ACCELERATION 10
+#define SPEED_ADJUSTING_FREQ 10
+#define FORWARD_ACCELERATION 20
+#define BACKWARD_ACCELERATION 20
 
 /*---------------------------------------------------------------------*/
 
 //Görevler
 
-void adjustInputs();
-Ticker driveMotorsTask(adjustInputs, SPEED_ADJUSTING_FREQ); //Girişleri oku
+void driveMotors();
+Ticker driveMotorsTask(driveMotors, SPEED_ADJUSTING_FREQ); //Girişleri oku
 
 void emergencyLockdown();
 Ticker emergencyLockdownTask(emergencyLockdown, 1000);
@@ -74,10 +74,10 @@ byte xValueGas = 0, yValueGas = 0, xValueStr = 0, yValueStr = 0;
 
 byte determined_xValueGas = 0, determined_yValueGas = 0, determined_xValueStr = 0, determined_yValueStr = 0;
 
-byte JIV_xValueGas = 160; //Joystick Idle Value
-byte JIV_yValueGas = 160; //Joystick Idle Value
-byte JIV_xValueStr = 160; //Joystick Idle Value
-byte JIV_yValueStr = 160; //Joystick Idle Value
+byte JIV_xValueGas = 125; //Joystick Idle Value
+byte JIV_yValueGas = 125; //Joystick Idle Value
+byte JIV_xValueStr = 125; //Joystick Idle Value
+byte JIV_yValueStr = 125; //Joystick Idle Value
 
 /*---------------------------------------------------------------------*/
 
@@ -194,15 +194,15 @@ void getValuesFromRadio()
 
 void smoothInputs(byte& determinedValue, byte currentValue, byte forwardAccel, byte backwardAccel)
 {
-  if (abs(currentValue - determinedValue) > backwardAccel) 
+  if (abs(currentValue - determinedValue) > forwardAccel)
   {
-    if (currentValue > determinedValue) 
+    if (currentValue > determinedValue)
     {
       determinedValue += forwardAccel;
     } 
     else 
     {
-      determinedValue -= backwardAccel;
+      determinedValue -= forwardAccel;
     }
   }
 }
@@ -213,7 +213,7 @@ void determineDirectionAndSpeed(byte input, int channel_R, int channel_L, int mi
   {
     ledcWrite(channel_L, 0); // Sol kanalı kapat
     byte pwmValue = map(input, middlePoint, 255, 0, 255);
-    ledcWrite(channel_R, map(pow(pwmValue, 2), pow(0, 2), pow(255, 2), 0, 255));
+    ledcWrite(channel_R, map(pow(pwmValue, 3), pow(0, 3), pow(255, 3), 0, 255));
   }
   else
   {
