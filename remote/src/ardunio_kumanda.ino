@@ -1,8 +1,5 @@
 
 
-//NOT: Kod şu anlık küçük test arabası için optimizedir.
-
-
 //Kütüphaneler.
 #include <SPI.h>
 #include <nRF24L01.h>

@@ -36,8 +36,7 @@
 
 //parametreler
 #define SPEED_ADJUSTING_FREQ 10
-#define FORWARD_ACCELERATION 20
-#define BACKWARD_ACCELERATION 20
+#define ACCELERATION 30
 
 /*---------------------------------------------------------------------*/
 
@@ -58,6 +57,9 @@ bool atLockdown = false;
 const int pwmFreq = 15000;
 const int pwmResolution = 8;
 
+
+//pwm kanalları
+
 const int pwmChannel_1R = 0;
 const int pwmChannel_1L = 1;
 
@@ -74,10 +76,7 @@ byte xValueGas = 0, yValueGas = 0, xValueStr = 0, yValueStr = 0;
 
 byte determined_xValueGas = 0, determined_yValueGas = 0, determined_xValueStr = 0, determined_yValueStr = 0;
 
-byte JIV_xValueGas = 125; //Joystick Idle Value
-byte JIV_yValueGas = 125; //Joystick Idle Value
-byte JIV_xValueStr = 125; //Joystick Idle Value
-byte JIV_yValueStr = 125; //Joystick Idle Value
+byte joystickIdleValue = 125;
 
 /*---------------------------------------------------------------------*/
 
@@ -147,13 +146,13 @@ void setup()
   setPins();
   startRadio();
   driveMotorsTask.start();
-  //emergencyLockdownTask.start();    geçici olarak devre dışı bırakıldı.
+  emergencyLockdownTask.start();
 }
 
 void loop() 
 {
   getValuesFromRadio();
-  //emergencyLockdownTask.update();   geçici olarak devre dışı bırakıldı.
+  emergencyLockdownTask.update();
   driveMotorsTask.update();
 }
 
@@ -168,8 +167,7 @@ void getValuesFromRadio()
   if (radio.available()) 
   {
     radio.read(&data, sizeof(data));  //Verileri değişkenlere çek.
-    dataReceived = true; //Veri geldiğini kaydet.
-    atLockdown = false; //Kilidi kapat.
+    dataReceived = true; //Verinin geldiğini kaydet.
 
     //verileri değişkenlere ata
     xValueGas = data[0];
@@ -192,17 +190,17 @@ void getValuesFromRadio()
 }
 
 
-void smoothInputs(byte& determinedValue, byte currentValue, byte forwardAccel, byte backwardAccel)
+void smoothInputs(byte& determinedValue, byte currentValue, byte Accel)
 {
-  if (abs(currentValue - determinedValue) > forwardAccel)
+  if (abs(currentValue - determinedValue) > Accel)
   {
     if (currentValue > determinedValue)
     {
-      determinedValue += forwardAccel;
+      determinedValue += Accel;
     } 
     else 
     {
-      determinedValue -= forwardAccel;
+      determinedValue -= Accel;
     }
   }
 }
@@ -227,18 +225,18 @@ void determineDirectionAndSpeed(byte input, int channel_R, int channel_L, int mi
 
 void adjustInputs()
 {
-  smoothInputs(determined_xValueGas, xValueGas, FORWARD_ACCELERATION, BACKWARD_ACCELERATION);
-  smoothInputs(determined_yValueGas, yValueGas, FORWARD_ACCELERATION, BACKWARD_ACCELERATION);
-  smoothInputs(determined_xValueStr, xValueStr, FORWARD_ACCELERATION, BACKWARD_ACCELERATION);
-  smoothInputs(determined_yValueStr, yValueStr, FORWARD_ACCELERATION, BACKWARD_ACCELERATION);
+  smoothInputs(determined_xValueGas, xValueGas, ACCELERATION);
+  smoothInputs(determined_yValueGas, yValueGas, ACCELERATION);
+  smoothInputs(determined_xValueStr, xValueStr, ACCELERATION);
+  smoothInputs(determined_yValueStr, yValueStr, ACCELERATION);
 }
 
 void sendPWM()
 {
-  determineDirectionAndSpeed(determined_xValueGas, pwmChannel_1R, pwmChannel_1L, JIV_xValueGas);
-  determineDirectionAndSpeed(determined_yValueGas, pwmChannel_2R, pwmChannel_2L, JIV_yValueGas);
-  determineDirectionAndSpeed(determined_xValueStr, pwmChannel_3R, pwmChannel_3L, JIV_xValueStr);
-  determineDirectionAndSpeed(determined_yValueStr, pwmChannel_4R, pwmChannel_4L, JIV_yValueStr);
+  determineDirectionAndSpeed(determined_xValueGas, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
+  determineDirectionAndSpeed(determined_yValueGas, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
+  determineDirectionAndSpeed(determined_xValueStr, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+  determineDirectionAndSpeed(determined_yValueStr, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
 }
 
 
@@ -251,21 +249,14 @@ void driveMotors()
 
 
 
-
-void lockMotor(int channel_R, int channel_L)
-{
-  determineDirectionAndSpeed(0, channel_R, channel_L, JIV_xValueGas);
-}
-
 void emergencyLockdown()
 {
   if (!dataReceived)
   {
-    atLockdown = true;
-    lockMotor(pwmChannel_1R, pwmChannel_1L);
-    lockMotor(pwmChannel_2R, pwmChannel_2L);
-    lockMotor(pwmChannel_3R, pwmChannel_3L);
-    lockMotor(pwmChannel_4R, pwmChannel_4L);
+    xValueGas = joystickIdleValue;
+    yValueGas = joystickIdleValue;
+    xValueStr = joystickIdleValue;
+    yValueStr = joystickIdleValue;
   }
   dataReceived = false; //kontrol bool'unu sıfırla  
 }
