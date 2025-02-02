@@ -241,15 +241,27 @@ void adjustInputs()
 
 void determineDirectionAndSpeed(byte input, int channel_R, int channel_L, int middlePoint)
 {
+  int R_value;
+  int L_value;
   if (input > middlePoint)
   {
-    ledcWrite(channel_L, 0); // Sol kanalı kapat
-    ledcWrite(channel_R, map(input, middlePoint, 255, 0, 255));
+    if (L_value != 0)
+    {
+      L_value = 0;
+      ledcWrite(channel_L, L_value); // Sol kanalı kapat
+    }
+    R_value = map(input, middlePoint, 255, 0, 255);
+    ledcWrite(channel_R, R_value);
   }
   else
   {
-    ledcWrite(channel_R, 0); // Sağ kanalı kapat
-    ledcWrite(channel_L, map(input, 0, middlePoint, 255, 0));
+    if (R_value != 0)
+    {
+      R_value = 0;
+      ledcWrite(channel_R, R_value); // Sol kanalı kapat
+    }
+    L_value = map(input, 0, middlePoint, 255, 0);
+    ledcWrite(channel_L, L_value);
   }
 }
 
