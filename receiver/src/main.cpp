@@ -7,6 +7,7 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 #include <Ticker.h>
+#include <math.h>
 
 /*---------------------------------------------------------------------*/
 
@@ -83,6 +84,20 @@ byte joystickIdleValue = 125;
 
 int R_value;
 int L_value;
+int power;
+
+float teta;
+float sin_value;
+float cos_value;
+float max_value;
+float omni_x;
+float omni_y;
+float turn;
+float left_front;
+float right_front;
+float left_rear;
+float right_rear;
+
 
 /*---------------------------------------------------------------------*/
 
@@ -105,7 +120,8 @@ void omni_Y();
 void omni_Diagonal();
 void omni_Turn();
 void simpleOmniDrive();
-
+void power_direction_calculation();
+void omni_move();
 /*---------------------------------------------------------------------*/
 
 
@@ -167,15 +183,17 @@ void loop()
   emergencyLockdownTask.update();
   adjustInputsTask.update();
   //sendPWM();
-  if (abs(xValueStr - joystickIdleValue) > OMNIDEADZONE ||  //Dönüş yada ilerlemeye karar ver, dönüşe öncelik ver.
-      abs(yValueStr - joystickIdleValue) > OMNIDEADZONE)
+  /*
+  if (abs(xValueGas - joystickIdleValue) > OMNIDEADZONE ||  //Dönüş yada ilerlemeye karar ver, dönüşe öncelik ver.
+      abs(yValueGas - joystickIdleValue) > OMNIDEADZONE)
   {
     omni_Turn();
   }
   else
   {
     simpleOmniDrive();
-  }
+  }*/
+  omni_move();
 }
 
 
@@ -298,7 +316,7 @@ void emergencyLockdown()
   dataReceived = false; //kontrol bool'unu sıfırla  
 }
 
-
+/*
 void simpleOmniDrive()
 {
   //en basit şekilde yöne karar ver ve ilgili fonksiyona yönlendir. Geçici, çok ilkel bir yöntem. Biraz kafa patlatmak lazım...
@@ -360,8 +378,48 @@ void omni_Turn()
   determinePwmValues(det_yValueStr, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
   determinePwmValues(det_yValueStr, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
   determinePwmValues(255-det_yValueStr, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
+}*/
+void power_direction_calculation()
+{
+  omni_x = det_xValueGas /255,0;
+  omni_y = -det_yValueGas /255,0;
+  turn = det_xValueStr /255,0;
+  
+
+  teta = atan2(omni_y,omni_x);
+  power = hypot(omni_x,omni_y);
 }
 
+
+
+void omni_move()
+{
+  power_direction_calculation();
+  sin_value = sin(teta-PI/4);
+  cos_value = cos(teta-PI/4);
+  max_value = max(abs(sin_value),abs(cos_value));
+
+  left_front = power * cos_value/max_value + turn;
+  right_front = power * sin_value/max_value - turn;
+  left_rear = power * sin_value/max_value + turn;
+  right_rear = power * cos_value/max_value - turn;
+
+  if ((power + abs(turn)) > 1)
+  {
+    left_front /= power + turn; 
+    right_front /= power + turn; 
+    left_rear /= power + turn; 
+    right_rear /= power + turn; 
+  }
+  left_front *= 255;
+  right_front *= 255;
+  left_rear *= 255;
+  right_rear *=255;
+  determinePwmValues(left_front, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
+  determinePwmValues(right_front, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
+  determinePwmValues(right_rear, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+  determinePwmValues(left_rear, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
+}
 
 
 
