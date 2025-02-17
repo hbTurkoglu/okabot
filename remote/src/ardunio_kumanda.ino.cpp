@@ -1,6 +1,9 @@
+# 1 "C:\\Users\\YUSUFE~1\\AppData\\Local\\Temp\\tmpy6uaqb9o"
+#include <Arduino.h>
+# 1 "C:/Users/yusufemrebilir/Documents/GitHub/okabot/remote/src/ardunio_kumanda.ino"
 
 
-//Kütüphaneler.
+
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
@@ -9,18 +12,18 @@
 
 #define DEBUG_MODE true
 
-// NRF24L01 tanımlamaları
-#define CE_PIN 9//anten pinleri sck= 13 mosi = 11  miso = 12 digital
+
+#define CE_PIN 9
 #define CSN_PIN 10
 
-//Joystick tanımlamaları.
-#define VRX_PIN_GAS 0//joystick pinleri analog
+
+#define VRX_PIN_GAS 0
 #define VRY_PIN_GAS 1
-#define VRX_PIN_STR 2   
+#define VRX_PIN_STR 2
 #define VRY_PIN_STR 3
 
 
-//Joystick değişkenleri.
+
 int xValueGas = 0;
 int yValueGas = 0;
 int xValueStr = 0;
@@ -32,20 +35,23 @@ byte prev_xValueStr = 0;
 byte prev_yValueStr = 0;
 
 
-//Ticker
+
 int lcdUpdateFreq = 200;
 
 
-//Objeler.
+
 RF24 radio(CE_PIN,CSN_PIN);
 LCD_I2C lcd(0x27, 16, 2);
 
 const byte address[6] = "00001";
 
 byte data[4];
-
-
-void setup() 
+void setup();
+void loop();
+void startRadio();
+void sendData();
+#line 48 "C:/Users/yusufemrebilir/Documents/GitHub/okabot/remote/src/ardunio_kumanda.ino"
+void setup()
 {
   #if DEBUG_MODE
     Serial.begin(9600);
@@ -87,7 +93,7 @@ void sendData()
 
     radio.write(&data, sizeof(data));
 
-    
+
     #if false
       Serial.print("xg = ");
       Serial.println(data[0]);
@@ -99,5 +105,5 @@ void sendData()
       Serial.println(data[3]);
       Serial.println("\n");
     #endif
-    
+
 }

@@ -24,22 +24,22 @@
 #define MOTOR_1_R_PWM 12
 #define MOTOR_1_L_PWM 14
 
-#define MOTOR_2_R_PWM 27
-#define MOTOR_2_L_PWM 26
+#define MOTOR_2_R_PWM 26
+#define MOTOR_2_L_PWM 27
 
-#define MOTOR_3_R_PWM 25
-#define MOTOR_3_L_PWM 33
+#define MOTOR_3_R_PWM 33
+#define MOTOR_3_L_PWM 25
 
 #define MOTOR_4_R_PWM 32
 #define MOTOR_4_L_PWM 15
 
 
 //parametreler
-#define SPEED_ADJUSTING_FREQ 10
-#define ACCELERATION 2
+#define SPEED_ADJUSTING_FREQ 5
+#define ACCELERATION 20
 #define SLOWDOWNZONE 30
 
-#define OMNIDEADZONE 50
+#define OMNIDEADZONE 10
 
 /*---------------------------------------------------------------------*/
 
@@ -75,9 +75,9 @@ const int pwmChannel_3L = 5;
 const int pwmChannel_4R = 6;
 const int pwmChannel_4L = 7;
 
-byte xValueGas = 0, yValueGas = 0, xValueStr = 0, yValueStr = 0;
+byte xValueGas = 125, yValueGas = 125, xValueStr = 125, yValueStr = 125;
 
-byte det_xValueGas = 0, det_yValueGas = 0, det_xValueStr = 0, det_yValueStr = 0;
+byte det_xValueGas = 125, det_yValueGas = 125, det_xValueStr = 125, det_yValueStr = 125;
 
 byte joystickIdleValue = 125;
 
@@ -122,6 +122,9 @@ void startRadio()
 
 void setPins()
 {
+  pinMode(4, OUTPUT);
+  digitalWrite(4, 0);
+
   ledcSetup(pwmChannel_1R, pwmFreq, pwmResolution);
   ledcSetup(pwmChannel_1L, pwmFreq, pwmResolution);
   ledcSetup(pwmChannel_2R, pwmFreq, pwmResolution);
@@ -190,6 +193,7 @@ void getValuesFromRadio()
   {
     radio.read(&data, sizeof(data));  //Verileri değişkenlere çek.
     dataReceived = true; //Verinin geldiğini kaydet.
+    digitalWrite(4, 1);
 
     //verileri değişkenlere ata
     xValueStr = data[0];
@@ -294,6 +298,7 @@ void emergencyLockdown()
     yValueGas = joystickIdleValue;
     xValueStr = joystickIdleValue;
     yValueStr = joystickIdleValue;
+    digitalWrite(4, 0);
   }
   dataReceived = false; //kontrol bool'unu sıfırla  
 }
@@ -302,37 +307,47 @@ void emergencyLockdown()
 void simpleOmniDrive()
 {
   //en basit şekilde yöne karar ver ve ilgili fonksiyona yönlendir. Geçici, çok ilkel bir yöntem. Biraz kafa patlatmak lazım...
-  if(abs(xValueGas - joystickIdleValue) > OMNIDEADZONE &&
-      abs(yValueGas - joystickIdleValue) > OMNIDEADZONE)
+  if(abs(det_xValueGas - joystickIdleValue) > OMNIDEADZONE &&
+      abs(det_yValueGas - joystickIdleValue) > OMNIDEADZONE)
   {
     omni_Diagonal();
+    Serial.println("diagonal");
   }
-  if ((abs(xValueGas - joystickIdleValue) < OMNIDEADZONE) &&
-      (abs(yValueGas - joystickIdleValue) > OMNIDEADZONE))
+  if ((abs(det_xValueGas - joystickIdleValue) < OMNIDEADZONE) &&
+      (abs(det_yValueGas - joystickIdleValue) > OMNIDEADZONE))
   {
     omni_Y();
+    Serial.println("y");
   }
-  if((abs(xValueGas - joystickIdleValue) > OMNIDEADZONE) &&
-      (abs(yValueGas - joystickIdleValue) < OMNIDEADZONE))
+  if((abs(det_xValueGas - joystickIdleValue) > OMNIDEADZONE) &&
+      (abs(det_yValueGas - joystickIdleValue) < OMNIDEADZONE))
   {
     omni_X();
+    Serial.println("x");
+  }
+  else
+  {
+    determinePwmValues(joystickIdleValue, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
+    determinePwmValues(joystickIdleValue, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+    determinePwmValues(joystickIdleValue, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
+    determinePwmValues(joystickIdleValue, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
   }
 }
 
 void omni_Y()
 {
   determinePwmValues(det_yValueGas, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-  determinePwmValues(det_yValueGas, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
   determinePwmValues(det_yValueGas, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+  determinePwmValues(det_yValueGas, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
   determinePwmValues(det_yValueGas, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
 }
 
 void omni_X()
 {
-  determinePwmValues(255-det_xValueGas, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-  determinePwmValues(255-det_xValueGas, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
+  determinePwmValues(det_xValueGas, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
   determinePwmValues(det_xValueGas, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
-  determinePwmValues(det_xValueGas, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
+  determinePwmValues(255-det_xValueGas, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
+  determinePwmValues(255-det_xValueGas, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
 }
 
 void omni_Diagonal()
@@ -341,25 +356,25 @@ void omni_Diagonal()
       (det_xValueGas < joystickIdleValue && det_yValueGas < joystickIdleValue))
   {
     determinePwmValues(det_yValueGas, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-    determinePwmValues(det_yValueGas, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
-    determinePwmValues(joystickIdleValue, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+    determinePwmValues(det_yValueGas, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+    determinePwmValues(joystickIdleValue, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
     determinePwmValues(joystickIdleValue, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
   }
   else
   {
     determinePwmValues(joystickIdleValue, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-    determinePwmValues(joystickIdleValue, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
-    determinePwmValues(det_yValueGas, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+    determinePwmValues(joystickIdleValue, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+    determinePwmValues(det_yValueGas, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
     determinePwmValues(det_yValueGas, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
   }
 }
 
 void omni_Turn()
 {
-  determinePwmValues(255-det_yValueStr, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
+  determinePwmValues(det_yValueStr, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
   determinePwmValues(det_yValueStr, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
   determinePwmValues(det_yValueStr, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
-  determinePwmValues(255-det_yValueStr, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
+  determinePwmValues(det_yValueStr, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
 }
 
 
