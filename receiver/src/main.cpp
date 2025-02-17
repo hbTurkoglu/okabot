@@ -78,17 +78,17 @@ const int pwmChannel_4L = 7;
 
 byte xValueGas = 0, yValueGas = 0, xValueStr = 0, yValueStr = 0;
 
-byte det_xValueGas = 0, det_yValueGas = 0, det_xValueStr = 0, det_yValueStr = 0;
+byte det_xValueGas = 255, det_yValueGas = 25, det_xValueStr = 0, det_yValueStr = 0;
 
 byte joystickIdleValue = 125;
 
 int R_value;
 int L_value;
-int power;
 
+float power;
 float teta;
-float sin_value;
-float cos_value;
+double sin_value;
+double cos_value;
 float max_value;
 float omni_x;
 float omni_y;
@@ -115,11 +115,11 @@ void startRadio();
 void setPins();
 void getValuesFromRadio();
 void sendPWM();
-void omni_X();
-void omni_Y();
-void omni_Diagonal();
-void omni_Turn();
-void simpleOmniDrive();
+//void omni_X();
+//void omni_Y();
+//void omni_Diagonal();
+//void omni_Turn();
+//void simpleOmniDrive();
 void power_direction_calculation();
 void omni_move();
 /*---------------------------------------------------------------------*/
@@ -138,6 +138,9 @@ void startRadio()
 
 void setPins()
 {
+  pinMode(4,OUTPUT);
+  digitalWrite(4,0);
+
   ledcSetup(pwmChannel_1R, pwmFreq, pwmResolution);
   ledcSetup(pwmChannel_1L, pwmFreq, pwmResolution);
   ledcSetup(pwmChannel_2R, pwmFreq, pwmResolution);
@@ -182,17 +185,6 @@ void loop()
   getValuesFromRadio();
   emergencyLockdownTask.update();
   adjustInputsTask.update();
-  //sendPWM();
-  /*
-  if (abs(xValueGas - joystickIdleValue) > OMNIDEADZONE ||  //Dönüş yada ilerlemeye karar ver, dönüşe öncelik ver.
-      abs(yValueGas - joystickIdleValue) > OMNIDEADZONE)
-  {
-    omni_Turn();
-  }
-  else
-  {
-    simpleOmniDrive();
-  }*/
   omni_move();
 }
 
@@ -208,7 +200,7 @@ void getValuesFromRadio()
   {
     radio.read(&data, sizeof(data));  //Verileri değişkenlere çek.
     dataReceived = true; //Verinin geldiğini kaydet.
-
+    digitalWrite(4,1);
     //verileri değişkenlere ata
     xValueStr = data[0];
     yValueStr = data[1];
@@ -307,7 +299,8 @@ void sendPWM()
 void emergencyLockdown()
 {
   if (!dataReceived)
-  {
+  { 
+    digitalWrite(4,0);
     xValueGas = joystickIdleValue;
     yValueGas = joystickIdleValue;
     xValueStr = joystickIdleValue;
@@ -381,9 +374,10 @@ void omni_Turn()
 }*/
 void power_direction_calculation()
 {
-  omni_x = det_xValueGas /255,0;
-  omni_y = -det_yValueGas /255,0;
-  turn = det_xValueStr /255,0;
+
+  omni_x = det_xValueGas /255.0;
+  omni_y = -det_yValueGas /255.0;
+  turn = det_xValueStr /255.0;
   
 
   teta = atan2(omni_y,omni_x);
@@ -415,11 +409,44 @@ void omni_move()
   right_front *= 255;
   left_rear *= 255;
   right_rear *=255;
-  determinePwmValues(left_front, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-  determinePwmValues(right_front, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
-  determinePwmValues(right_rear, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
-  determinePwmValues(left_rear, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
+
+  #if true
+    Serial.print("left_front: ");
+    Serial.println(left_front);
+    Serial.print("right_front: ");
+    Serial.println(right_front);
+    Serial.print("left_rear: ");
+    Serial.println(left_rear);
+    Serial.print("right_rear: ");
+    Serial.println(right_rear);
+    Serial.print("omni_x: ");
+    Serial.println(omni_x);
+    Serial.print("omni_y: ");
+    Serial.println(omni_y);
+    Serial.print("turn: ");
+    Serial.println(turn);
+    Serial.print("teta: ");
+    Serial.println(teta);
+    Serial.print("power: ");
+    Serial.println(power);
+    Serial.print("sin_value: ");
+    Serial.println(sin_value);
+    Serial.print("cos_value: ");
+    Serial.println(cos_value);
+    delay(1000);
+  #endif
+
+
+
+  ledcWrite(pwmChannel_1R, left_front);
+  ledcWrite(pwmChannel_2R, right_front);
+  ledcWrite(pwmChannel_3R, right_rear);
+  ledcWrite(pwmChannel_4R, left_rear);
 }
+
+
+
+
 
 
 
