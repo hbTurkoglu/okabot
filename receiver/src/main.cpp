@@ -39,7 +39,7 @@
 #define ACCELERATION 20
 #define SLOWDOWNZONE 30
 
-#define OMNIDEADZONE 10
+#define OMNIDEADZONE 20
 
 /*---------------------------------------------------------------------*/
 
@@ -49,7 +49,7 @@ void adjustInputs();
 Ticker adjustInputsTask(adjustInputs, SPEED_ADJUSTING_FREQ, 0, MICROS); //Girişleri oku
 
 void emergencyLockdown();
-Ticker emergencyLockdownTask(emergencyLockdown, 1000);
+Ticker emergencyLockdownTask(emergencyLockdown, 2000);
 bool dataReceived = false;
 bool atLockdown = false;
 
@@ -160,14 +160,14 @@ void setup()
   setPins();
   startRadio();
   adjustInputsTask.start();
-  emergencyLockdownTask.start();
+  //emergencyLockdownTask.start();
 
 }
 
 void loop() 
 {
   getValuesFromRadio();
-  emergencyLockdownTask.update();
+  //emergencyLockdownTask.update();
   adjustInputsTask.update();
   //sendPWM();
   if (abs(xValueStr - joystickIdleValue) > OMNIDEADZONE ||  //Dönüş yada ilerlemeye karar ver, dönüşe öncelik ver.
@@ -213,6 +213,10 @@ void getValuesFromRadio()
       Serial.print("\n");
       delay(500);
     #endif
+  }
+  else
+  {
+    digitalWrite(4,0);
   }
 }
 
@@ -372,8 +376,8 @@ void omni_Diagonal()
 void omni_Turn()
 {
   determinePwmValues(det_yValueStr, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-  determinePwmValues(det_yValueStr, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
-  determinePwmValues(det_yValueStr, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+  determinePwmValues(-det_yValueStr, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
+  determinePwmValues(-det_yValueStr, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
   determinePwmValues(det_yValueStr, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
 }
 

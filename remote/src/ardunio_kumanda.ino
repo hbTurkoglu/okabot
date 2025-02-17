@@ -4,10 +4,8 @@
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
-#include <LCD_I2C.h>
-#include <Ticker.h>
 
-#define DEBUG_MODE true
+#define DEBUG_MODE false
 
 // NRF24L01 tanımlamaları
 #define CE_PIN 9//anten pinleri sck= 13 mosi = 11  miso = 12 digital
@@ -26,19 +24,10 @@ int yValueGas = 0;
 int xValueStr = 0;
 int yValueStr = 0;
 
-byte prev_xValueGas = 0;
-byte prev_yValueGas = 0;
-byte prev_xValueStr = 0;
-byte prev_yValueStr = 0;
-
-
-//Ticker
-int lcdUpdateFreq = 200;
 
 
 //Objeler.
 RF24 radio(CE_PIN,CSN_PIN);
-LCD_I2C lcd(0x27, 16, 2);
 
 const byte address[6] = "00001";
 
