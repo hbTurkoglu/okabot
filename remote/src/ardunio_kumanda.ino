@@ -29,7 +29,7 @@ int yValueStr = 0;
 //Objeler.
 RF24 radio(CE_PIN,CSN_PIN);
 
-const byte address[6] = "00001";
+const byte address[6] = "00031";
 
 byte data[4];
 
@@ -69,6 +69,7 @@ void sendData()
     xValueStr = analogRead(VRX_PIN_STR);
     yValueStr = analogRead(VRY_PIN_STR);
 
+    //Verileri sıkıştır ve değişkenlere ata.
     data[0] = map(xValueGas, 0, 1023, 0, 255);
     data[1] = map(yValueGas, 0, 1023, 0, 255);
     data[2] = map(xValueStr, 0, 1023, 0, 255);
@@ -77,7 +78,7 @@ void sendData()
     radio.write(&data, sizeof(data));
 
     
-    #if false
+    #if DEBUG_MODE
       Serial.print("xg = ");
       Serial.println(data[0]);
       Serial.print("yg = ");
