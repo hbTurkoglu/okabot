@@ -36,11 +36,11 @@
 
 //parametreler
 
-#define MAX_POWER 50
+#define MAX_POWER 80
 
 #define SPEED_ADJUSTING_FREQ 2
 #define ACCELERATION 1
-#define SLOWDOWNZONE 80
+#define SLOWDOWNZONE 40
 
 
 /*---------------------------------------------------------------------*/
@@ -51,7 +51,7 @@ void adjustInputs();
 Ticker adjustInputsTask(adjustInputs, SPEED_ADJUSTING_FREQ, 0, MILLIS); //Girişleri oku
 
 void emergencyLockdown();
-Ticker emergencyLockdownTask(emergencyLockdown, 1000);
+Ticker emergencyLockdownTask(emergencyLockdown, 500);
 bool dataReceived = false;
 bool atLockdown = false;
 
@@ -109,6 +109,7 @@ void setPins();
 void getValuesFromRadio();
 void sendPWM();
 void omniDrive();
+void omniTurn();
 
 /*---------------------------------------------------------------------*/
 
@@ -181,8 +182,15 @@ void loop()
 
   adjustInputsTask.update();
   printConsoleTask.update();
-
-  omniDrive();
+  
+  if (abs(det_yValueStr) > 15)
+  {
+    omniTurn();
+  }
+  else
+  {
+    omniDrive();
+  }
 }
 
 
@@ -325,8 +333,10 @@ void omniDrive()
   int power = sqrt(det_xValueGas*det_xValueGas + det_yValueGas*det_yValueGas);
   int angle = (atan2(det_yValueGas, det_xValueGas) * 180 / PI) - 45;
 
-  omniX = map(power * cos(angle * PI / 180), -360, 360, -255, 255);
-  omniY = map(-power * sin(angle * PI / 180), -360, 360, -255, 255);
+  if (power > 255) {power = 255;}
+
+  omniX = map(power * cos(angle * PI / 180), -180, 180, -255, 255);
+  omniY = map(-power * sin(angle * PI / 180), -180, 180, -255, 255);
 
   determinePwmValues(omniX, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
   determinePwmValues(omniY, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
@@ -334,6 +344,14 @@ void omniDrive()
   determinePwmValues(omniY, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
 }
 
+
+void omniTurn()
+{
+  determinePwmValues(det_yValueStr, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
+  determinePwmValues(-det_yValueStr, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
+  determinePwmValues(-det_yValueStr, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+  determinePwmValues(det_yValueStr, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
+}
 
 
 
