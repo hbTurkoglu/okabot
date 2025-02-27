@@ -24,23 +24,25 @@
 #define MOTOR_1_R_PWM 12
 #define MOTOR_1_L_PWM 14
 
-#define MOTOR_2_R_PWM 26
 #define MOTOR_2_L_PWM 27
+#define MOTOR_2_R_PWM 26
 
-#define MOTOR_3_R_PWM 33
-#define MOTOR_3_L_PWM 25
+#define MOTOR_3_L_PWM 32
+#define MOTOR_3_R_PWM 15
 
-#define MOTOR_4_R_PWM 32
-#define MOTOR_4_L_PWM 15
+#define MOTOR_4_R_PWM 25
+#define MOTOR_4_L_PWM 33
 
 
 //parametreler
 
 #define MAX_POWER 80
+#define SLOWDOWNZONE 40 //MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir.
 
 #define SPEED_ADJUSTING_FREQ 2
 #define ACCELERATION 1
-#define SLOWDOWNZONE 40
+
+#define LOCKDOWN_TIME 500
 
 
 /*---------------------------------------------------------------------*/
@@ -51,9 +53,8 @@ void adjustInputs();
 Ticker adjustInputsTask(adjustInputs, SPEED_ADJUSTING_FREQ, 0, MILLIS); //Girişleri oku
 
 void emergencyLockdown();
-Ticker emergencyLockdownTask(emergencyLockdown, 500);
+Ticker emergencyLockdownTask(emergencyLockdown, LOCKDOWN_TIME, 0, MILLIS); //Acil durum kapatma
 bool dataReceived = false;
-bool atLockdown = false;
 
 void printConsole();
 Ticker printConsoleTask(printConsole, 500);
@@ -106,8 +107,7 @@ byte data[4];
 //prototipler
 void startRadio();
 void setPins();
-void getValuesFromRadio();
-void sendPWM();
+void getRadio();
 void omniDrive();
 void omniTurn();
 
@@ -171,7 +171,7 @@ void setup()
 
 void loop() 
 {
-  getValuesFromRadio();
+  getRadio();
 
   if (!dataReceived)
   {
@@ -183,7 +183,7 @@ void loop()
   adjustInputsTask.update();
   printConsoleTask.update();
   
-  if (abs(det_yValueStr) > 15)
+  if (abs(det_yValueStr) > 10)
   {
     omniTurn();
   }
@@ -199,7 +199,7 @@ void loop()
 
 //Döngü fonksiyonları
 
-void getValuesFromRadio()
+void getRadio()
 {
   if (radio.available())
   {
@@ -225,21 +225,25 @@ void getValuesFromRadio()
 
 void printConsole()
 {
-/*  Serial.print("det_xValueGas: ");
+  Serial.println("-----------------------------");
+
+  Serial.print("det_xValueGas: ");
   Serial.println(det_xValueGas);
   Serial.print("det_xValueStr: ");
   Serial.println(det_xValueStr);
   Serial.print("det_yValueGas: ");
   Serial.println(det_yValueGas);
   Serial.print("det_yValueStr: ");
-  Serial.println(det_yValueStr);*/
+  Serial.println(det_yValueStr);
 
-  Serial.print("\n\n\n\n\n\n");
+  Serial.print("\n\n");
 
   Serial.println("omniX: ");
   Serial.println(omniX);
   Serial.println("omniY: ");
   Serial.println(omniY);
+
+  Serial.println("-----------------------------");
 }
 
 
@@ -267,7 +271,7 @@ void adjustInputs()
 }
 
 
-void determinePwmValues(int input, int channel_R, int channel_L, int middlePoint)
+void outputPwmValues(int input, int channel_R, int channel_L, int middlePoint)
 {
   if (input > middlePoint)
   {
@@ -307,14 +311,6 @@ void determinePwmValues(int input, int channel_R, int channel_L, int middlePoint
   }
 }
 
-void sendPWM()  //Direkt kontrol sağlayan test fonksiyonu. Normal kullanım için değildir.
-{
-  determinePwmValues(det_xValueGas, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-  determinePwmValues(det_yValueGas, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
-  determinePwmValues(det_xValueStr, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
-  determinePwmValues(det_yValueStr, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
-}
-
 
 void emergencyLockdown()
 {
@@ -338,19 +334,19 @@ void omniDrive()
   omniX = map(power * cos(angle * PI / 180), -180, 180, -255, 255);
   omniY = map(-power * sin(angle * PI / 180), -180, 180, -255, 255);
 
-  determinePwmValues(omniX, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-  determinePwmValues(omniY, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
-  determinePwmValues(omniX, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
-  determinePwmValues(omniY, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
+  outputPwmValues(omniX, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
+  outputPwmValues(omniY, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
+  outputPwmValues(omniX, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+  outputPwmValues(omniY, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
 }
 
 
 void omniTurn()
 {
-  determinePwmValues(det_yValueStr, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-  determinePwmValues(-det_yValueStr, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
-  determinePwmValues(-det_yValueStr, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
-  determinePwmValues(det_yValueStr, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
+  outputPwmValues(det_yValueStr, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
+  outputPwmValues(-det_yValueStr, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
+  outputPwmValues(-det_yValueStr, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+  outputPwmValues(det_yValueStr, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
 }
 
 
