@@ -24,14 +24,14 @@
 #define MOTOR_1_R_PWM 12
 #define MOTOR_1_L_PWM 14
 
-#define MOTOR_2_L_PWM 27
-#define MOTOR_2_R_PWM 26
+#define MOTOR_2_R_PWM 27
+#define MOTOR_2_L_PWM 26
 
 #define MOTOR_3_L_PWM 32
 #define MOTOR_3_R_PWM 15
 
-#define MOTOR_4_R_PWM 25
-#define MOTOR_4_L_PWM 33
+#define MOTOR_4_L_PWM 25
+#define MOTOR_4_R_PWM 33
 
 
 //parametreler
@@ -121,7 +121,7 @@ void startRadio()
   radio.begin();
   radio.openReadingPipe(0, address);
   radio.setDataRate(RF24_250KBPS);  //iletim hızı, 250kbps en hızlı.
-  radio.setPALevel(3);  //güç seviyesi, 1-min, 3-max.
+  radio.setPALevel(1);  //güç seviyesi, 1-min, 3-max.
   radio.startListening(); // Alıcı moduna geçiş.
 }
 
@@ -129,6 +129,16 @@ void setPins()
 {
   pinMode(4, OUTPUT);
   digitalWrite(4, 0);
+
+  pinMode(12, OUTPUT);
+  pinMode(14, OUTPUT);
+  pinMode(27, OUTPUT);
+  pinMode(26, OUTPUT);
+  pinMode(25, OUTPUT);
+  pinMode(33, OUTPUT);
+  pinMode(32, OUTPUT);
+  pinMode(15, OUTPUT);
+
 
   ledcSetup(pwmChannel_1R, pwmFreq, pwmResolution);
   ledcSetup(pwmChannel_1L, pwmFreq, pwmResolution);
@@ -331,8 +341,8 @@ void omniDrive()
 
   if (power > 255) {power = 255;}
 
-  omniX = map(power * cos(angle * PI / 180), -180, 180, -255, 255);
-  omniY = map(-power * sin(angle * PI / 180), -180, 180, -255, 255);
+  omniX = map((power * cos(angle * PI / 180)), -180, 180, -255, 255);
+  omniY = map((-power * sin(angle * PI / 180)), -180, 180, -255, 255);
 
   outputPwmValues(omniX, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
   outputPwmValues(omniY, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
