@@ -33,13 +33,15 @@
 #define MOTOR_4_L_PWM 25
 #define MOTOR_4_R_PWM 33
 
+#define ENABLE_PIN 21
+
 
 //parametreler
 
 #define MAX_POWER 80
 #define SLOWDOWNZONE 40 //MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir.
 
-#define SPEED_ADJUSTING_FREQ 2
+#define SPEED_ADJUSTING_FREQ 2 
 #define ACCELERATION 1
 
 #define LOCKDOWN_TIME 500
@@ -93,6 +95,9 @@ int L_value;
 int omniX;
 int omniY;
 
+int power;
+int angle;
+
 /*---------------------------------------------------------------------*/
 
 //Objeler.
@@ -128,7 +133,9 @@ void startRadio()
 void setPins()
 {
   pinMode(4, OUTPUT);
+  pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(4, 0);
+  digitalWrite(ENABLE_PIN, 1);
 
   pinMode(12, OUTPUT);
   pinMode(14, OUTPUT);
@@ -251,7 +258,8 @@ void printConsole()
   Serial.println("omniX: ");
   Serial.println(omniX);
   Serial.println("omniY: ");
-  Serial.println(omniY);
+  Serial.println(omniY); 
+
 
   Serial.println("-----------------------------");
 }
@@ -336,13 +344,20 @@ void emergencyLockdown()
 
 void omniDrive()
 {
-  int power = sqrt(det_xValueGas*det_xValueGas + det_yValueGas*det_yValueGas);
-  int angle = (atan2(det_yValueGas, det_xValueGas) * 180 / PI) - 45;
+  power = sqrt(det_xValueGas*det_xValueGas + det_yValueGas*det_yValueGas);
+  angle = (atan2(det_yValueGas, det_xValueGas) * 180 / PI) - 45;
 
   if (power > 255) {power = 255;}
 
   omniX = map((power * cos(angle * PI / 180)), -180, 180, -255, 255);
   omniY = map((-power * sin(angle * PI / 180)), -180, 180, -255, 255);
+
+  if (omniX > 249) {omniX = 255;}
+  else if (omniX < -249) {omniX = -255;}
+
+  if (omniY > 249) {omniY = 255;}
+  else if (omniY < -249) {omniY = -255;}
+
 
   outputPwmValues(omniX, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
   outputPwmValues(omniY, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
