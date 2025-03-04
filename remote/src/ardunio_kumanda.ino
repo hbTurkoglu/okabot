@@ -55,7 +55,7 @@ void startRadio()
   radio.begin();
   radio.setDataRate(RF24_250KBPS);
   radio.openWritingPipe(address);
-  radio.setPALevel(3);
+  radio.setPALevel(1);
   radio.stopListening();
 }
 

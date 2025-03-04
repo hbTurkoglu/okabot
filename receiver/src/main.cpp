@@ -41,7 +41,7 @@
 #define MAX_POWER 80
 #define SLOWDOWNZONE 40 //MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir.
 
-#define SPEED_ADJUSTING_FREQ 2 
+#define SPEED_ADJUSTING_FREQ 1 
 #define ACCELERATION 1
 
 #define LOCKDOWN_TIME 500
@@ -95,8 +95,8 @@ int L_value;
 int omniX;
 int omniY;
 
-int power;
-int angle;
+float power;
+float angle;
 
 /*---------------------------------------------------------------------*/
 
@@ -258,8 +258,16 @@ void printConsole()
   Serial.println("omniX: ");
   Serial.println(omniX);
   Serial.println("omniY: ");
-  Serial.println(omniY); 
+  Serial.println(omniY);
 
+  Serial.print("\n\n");
+  Serial.println(angle);
+
+  Serial.print("\n\n");
+  Serial.print("cos: ");
+  Serial.println(power * cos(angle * PI / 180));
+  Serial.print("sin: ");
+  Serial.println(-power * sin(angle * PI / 180));
 
   Serial.println("-----------------------------");
 }
@@ -347,16 +355,16 @@ void omniDrive()
   power = sqrt(det_xValueGas*det_xValueGas + det_yValueGas*det_yValueGas);
   angle = (atan2(det_yValueGas, det_xValueGas) * 180 / PI) - 45;
 
-  if (power > 255) {power = 255;}
+  //if (power > 255) {power = 255;}
 
-  omniX = map((power * cos(angle * PI / 180)), -180, 180, -255, 255);
-  omniY = map((-power * sin(angle * PI / 180)), -180, 180, -255, 255);
+  omniX = map((power * cos(angle * PI / 180)), -360, 360, -255, 255);
+  omniY = map((-power * sin(angle * PI / 180)*1.3), -360, 360, -255, 255);
 
-  if (omniX > 249) {omniX = 255;}
-  else if (omniX < -249) {omniX = -255;}
+  //if (omniX > 249) {omniX = 255;}
+  //else if (omniX < -249) {omniX = -255;}
 
-  if (omniY > 249) {omniY = 255;}
-  else if (omniY < -249) {omniY = -255;}
+  //if (omniY > 249) {omniY = 255;}
+  //else if (omniY < -249) {omniY = -255;}
 
 
   outputPwmValues(omniX, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
