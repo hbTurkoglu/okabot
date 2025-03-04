@@ -98,6 +98,8 @@ int omniY;
 float power;
 float angle;
 
+float motorOffsets[4] = {1, 1.08f, 1, 0.95f};
+
 /*---------------------------------------------------------------------*/
 
 //Objeler.
@@ -299,6 +301,8 @@ void adjustInputs()
 
 void outputPwmValues(int input, int channel_R, int channel_L, int middlePoint)
 {
+  float currentOffset = motorOffsets[((channel_L+1)/2)-1];
+
   if (input > middlePoint)
   {
     if (L_value != 0)
@@ -315,7 +319,7 @@ void outputPwmValues(int input, int channel_R, int channel_L, int middlePoint)
     {
       R_value = map((input - middlePoint) * (input - middlePoint), 0, SLOWDOWNZONE * SLOWDOWNZONE, 0, SLOWDOWNZONE);
     }
-    ledcWrite(channel_R, R_value);
+    ledcWrite(channel_R, R_value*currentOffset);
   }
   else
   {
@@ -333,7 +337,7 @@ void outputPwmValues(int input, int channel_R, int channel_L, int middlePoint)
     {
       L_value = map((input - middlePoint) * (input - middlePoint), 0, -SLOWDOWNZONE * SLOWDOWNZONE, 0, SLOWDOWNZONE);
     }
-    ledcWrite(channel_L, L_value);
+    ledcWrite(channel_L, L_value*currentOffset);
   }
 }
 
