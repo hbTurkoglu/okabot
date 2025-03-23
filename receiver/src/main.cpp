@@ -7,6 +7,8 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 #include <Ticker.h>
+#include <EasyEspNow.h>
+#include <WiFi.h>
 
 /*---------------------------------------------------------------------*/
 
@@ -39,7 +41,7 @@
 //parametreler
 
 #define MAX_POWER 80
-#define SLOWDOWNZONE 40 //MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir.
+#define SLOWDOWNZONE 40 //MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir. 6 sürücü bundan yandı sefaya söylemeyin.
 
 #define SPEED_ADJUSTING_FREQ 1 
 #define ACCELERATION 1
@@ -98,7 +100,7 @@ int omniY;
 float power;
 float angle;
 
-float motorOffsets[4] = {1, 1.08f, 1, 0.95f};
+float motorOffsets[4] = {1, 1, 1, 1};
 
 /*---------------------------------------------------------------------*/
 
@@ -107,30 +109,45 @@ RF24 radio(CE_PIN, CSN_PIN);
 
 
 const byte address[6] = "00031"; // Haberleşme adresi
+uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBC, 0x15, 0xF4}; // Alıcı mac adresi
+EasyEspNow espNow = EasyEspNow();
 byte data[4];
+
+typedef struct {
+  int received_xValueGas = 0, received_yValueGas = 0, received_xValueStr = 0, received_yValueStr = 0;
+} JoystickData;
+
+JoystickData joystickData;
 
 /*---------------------------------------------------------------------*/
 
 //prototipler
-void startRadio();
 void setPins();
-void getRadio();
 void omniDrive();
 void omniTurn();
+void startEspNow();
+void onDataRecv(const uint8_t* mac, const uint8_t* incomingData, int len, espnow_frame_recv_info_t *info);
 
 /*---------------------------------------------------------------------*/
 
 
 //Başlancıç fonksiyonları
 
-void startRadio()
+void startEspNow()
 {
-  radio.begin();
-  radio.openReadingPipe(0, address);
-  radio.setDataRate(RF24_250KBPS);  //iletim hızı, 250kbps en hızlı.
-  radio.setPALevel(1);  //güç seviyesi, 1-min, 3-max.
-  radio.startListening(); // Alıcı moduna geçiş.
+  WiFi.mode(WIFI_STA);
+  if (!espNow.begin(1, WIFI_IF_STA))
+  {
+    Serial.println("ESP-NOW baslatilamadi.");
+    return;
+  }
+  espNow.onDataReceived([](const uint8_t* mac, const uint8_t* incomingData, int len, espnow_frame_recv_info_t *info)
+  {
+    onDataRecv(mac, incomingData, len, info);
+  });
 }
+
+
 
 void setPins()
 {
@@ -183,21 +200,20 @@ void setup()
   #endif
 
   setPins();
-  startRadio();
   adjustInputsTask.start();
 
 }
 
 void loop() 
 {
-  getRadio();
 
-  if (!dataReceived)
+  /*if (!dataReceived)
   {
     if (emergencyLockdownTask.state() == STOPPED) {emergencyLockdownTask.start();}
     emergencyLockdownTask.update();
   } 
   else {if (emergencyLockdownTask.state() == RUNNING) {emergencyLockdownTask.stop();}}
+  */
 
   adjustInputsTask.update();
   printConsoleTask.update();
@@ -218,28 +234,13 @@ void loop()
 
 //Döngü fonksiyonları
 
-void getRadio()
-{
-  if (radio.available())
-  {
-    dataReceived = true; //Verinin geldiğini kaydet.
-    radio.read(&data, sizeof(data));  //Verileri değişkenlere çek.
-    digitalWrite(4, 1);
 
-    //verileri değişkenlere ata ve sıkıştırmayı aç.
-    xValueStr = map(data[0], 0, 255, -255, 255);
-    yValueStr = map(data[1], 0, 255, -255, 255);
-    xValueGas = map(data[2], 0, 255, -255, 255);
-    yValueGas = map(data[3], 0, 255, -255, 255);
-  }
-  else
-  {dataReceived = false;} 
-  //Veri gelmediyse, veri alındı mı değişkenini false yap.
-  //Bu değişken, veri alınmadığında acil durum kapatma işlemi yapar.
-  //Kumanda sürekli veri göndermediğinden dolayı runtime'da bu değer sürekli değer değiştirir.
-  //Ancak acil durum fonksiyonu sadece belirli bir süre bu değer false olduğunda çalışır.
-  //Bu sayede kumanda uzun süre veri göndermeyi keserse, araç acil durumda kapanır.
+// ESP-NOW'dan veri alındığında çağrılan fonksiyon
+void onDataRecv(const uint8_t* mac, const uint8_t* incomingData, int len, espnow_frame_recv_info_t *info)
+{
+  memcpy(&joystickData, incomingData, sizeof(joystickData));
 }
+
 
 
 void printConsole()
@@ -292,10 +293,10 @@ void linearlyRefineInputs(int& determinedValue, int currentValue, int Accel)
 
 void adjustInputs()
 {
-  linearlyRefineInputs(det_xValueGas, xValueGas, ACCELERATION);
-  linearlyRefineInputs(det_yValueGas, yValueGas, ACCELERATION);
-  linearlyRefineInputs(det_xValueStr, xValueStr, ACCELERATION);
-  linearlyRefineInputs(det_yValueStr, yValueStr, ACCELERATION);
+  linearlyRefineInputs(det_xValueGas, joystickData.received_xValueGas, ACCELERATION);
+  linearlyRefineInputs(det_yValueGas, joystickData.received_yValueGas, ACCELERATION);
+  linearlyRefineInputs(det_xValueStr, joystickData.received_xValueStr, ACCELERATION);
+  linearlyRefineInputs(det_yValueStr, joystickData.received_yValueStr, ACCELERATION);
 }
 
 
@@ -389,3 +390,9 @@ void omniTurn()
 
 
 
+  //Veri gelmediyse, veri alındı mı değişkenini false yap.
+  //Bu değişken, veri alınmadığında acil durum kapatma işlemi yapar.
+  //Kumanda sürekli veri göndermediğinden dolayı runtime'da bu değer sürekli değer değiştirir.
+  //Ancak acil durum fonksiyonu sadece belirli bir süre bu değer false olduğunda çalışır.
+  //Bu sayede kumanda uzun süre veri göndermeyi keserse, araç acil durumda kapanır.
+  //Selamlar samet hocam google işine baksın ben comment değil destan yazarım, Saygılar.
