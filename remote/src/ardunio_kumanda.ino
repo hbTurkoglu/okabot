@@ -1,3 +1,4 @@
+/*---------------------------------------------------------------------*/
 
 
 //Kütüphaneler.
@@ -7,10 +8,13 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
+
 #define DEBUG_MODE true
 
+
 // NRF24L01 tanımlamaları
-#define CE_PIN 9//anten pinleri sck= 13 mosi = 11  miso = 12 digital
+//anten pinleri sck= 13 mosi = 11  miso = 12 digital
+#define CE_PIN 9
 #define CSN_PIN 10
 
 //Joystick tanımlamaları.
@@ -18,6 +22,10 @@
 #define VRY_PIN_GAS 33
 #define VRX_PIN_STR 34  
 #define VRY_PIN_STR 35
+
+
+
+/*---------------------------------------------------------------------*/
 
 
 //Joystick değişkenleri.
@@ -49,6 +57,32 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.print("\r\nLast Packet Send Status:\t");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
+
+/*---------------------------------------------------------------------*/
+
+
+// prototipler
+
+void startRadio()
+void sendData()
+
+
+
+// Başlancıç fonksiyonları
+void startRadio()
+{
+  radio.begin();
+  radio.setDataRate(RF24_250KBPS);
+  radio.openWritingPipe(address);
+  radio.setPALevel(1);
+  radio.stopListening();
+}
+
+
+/*---------------------------------------------------------------------*/
+
+
+//Görev fonksiyonları
 
 void setup() 
 {
@@ -87,16 +121,10 @@ void loop()
 }
 
 
-void startRadio()
-{
-  radio.begin();
-  radio.setDataRate(RF24_250KBPS);
-  radio.openWritingPipe(address);
-  radio.setPALevel(1);
-  radio.stopListening();
-}
+/*---------------------------------------------------------------------*/
 
 
+//Döngü fonksiyonları
 
 
 void sendData()
@@ -135,3 +163,6 @@ void sendData()
     #endif
     
 }
+
+
+/*---------------------------------------------------------------------*/
