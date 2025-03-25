@@ -7,7 +7,7 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 #include <Ticker.h>
-#include <EasyEspNow.h>
+#include <esp_now.h>
 #include <WiFi.h>
 
 /*---------------------------------------------------------------------*/
@@ -63,6 +63,8 @@ bool dataReceived = false;
 void printConsole();
 Ticker printConsoleTask(printConsole, 500);
 
+
+
 /*---------------------------------------------------------------------*/
 
 //pwm değerleri
@@ -109,8 +111,7 @@ RF24 radio(CE_PIN, CSN_PIN);
 
 
 const byte address[6] = "00031"; // Haberleşme adresi
-uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBC, 0x15, 0xF4}; // Alıcı mac adresi
-EasyEspNow espNow = EasyEspNow();
+uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBC, 0x15, 0xF4}; // Kumanda mac adresi
 byte data[4];
 
 typedef struct {
@@ -119,32 +120,35 @@ typedef struct {
 
 JoystickData joystickData;
 
+esp_now_peer_info_t peerInfo;
+
+
+
 /*---------------------------------------------------------------------*/
 
 //prototipler
 void setPins();
 void omniDrive();
 void omniTurn();
-void startEspNow();
-void onDataRecv(const uint8_t* mac, const uint8_t* incomingData, int len, espnow_frame_recv_info_t *info);
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) ;
 
 /*---------------------------------------------------------------------*/
 
 
 //Başlancıç fonksiyonları
 
-void startEspNow()
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) 
 {
-  WiFi.mode(WIFI_STA);
-  if (!espNow.begin(1, WIFI_IF_STA))
+  memcpy(&joystickData, incomingData, sizeof(joystickData));
+  xValueGas = map(joystickData.received_xValueGas, 0, 255, -255, 255);
+  yValueGas = map(joystickData.received_yValueGas, 0, 255, -255, 255);
+  xValueStr = map(joystickData.received_xValueStr, 0, 255, -255, 255);
+  yValueStr = map(joystickData.received_yValueStr, 0, 255, -255, 255);
+  if (!dataReceived)
   {
-    Serial.println("ESP-NOW baslatilamadi.");
-    return;
+    digitalWrite(4, 1);
   }
-  espNow.onDataReceived([](const uint8_t* mac, const uint8_t* incomingData, int len, espnow_frame_recv_info_t *info)
-  {
-    onDataRecv(mac, incomingData, len, info);
-  });
+  dataReceived = true;
 }
 
 
@@ -202,23 +206,39 @@ void setup()
   setPins();
   adjustInputsTask.start();
 
+  
+  // Init ESP-NOW
+  WiFi.mode(WIFI_STA);
+  if (esp_now_init() != ESP_OK) {
+    while (true)
+    {
+      Serial.println("Error initializing ESP-NOW");
+      digitalWrite(4, 0);
+      delay(500);
+      digitalWrite(4, 1);
+      delay(500);
+    }
+    return;
+  }
+  esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+
 }
 
 void loop() 
 {
 
-  /*if (!dataReceived)
+  if (!dataReceived)
   {
     if (emergencyLockdownTask.state() == STOPPED) {emergencyLockdownTask.start();}
     emergencyLockdownTask.update();
   } 
   else {if (emergencyLockdownTask.state() == RUNNING) {emergencyLockdownTask.stop();}}
-  */
+  
 
   adjustInputsTask.update();
   printConsoleTask.update();
   
-  if (abs(det_yValueStr) > 10)
+  if (abs(det_yValueStr) > 20)
   {
     omniTurn();
   }
@@ -226,6 +246,7 @@ void loop()
   {
     omniDrive();
   }
+  
 }
 
 
@@ -233,13 +254,6 @@ void loop()
 
 
 //Döngü fonksiyonları
-
-
-// ESP-NOW'dan veri alındığında çağrılan fonksiyon
-void onDataRecv(const uint8_t* mac, const uint8_t* incomingData, int len, espnow_frame_recv_info_t *info)
-{
-  memcpy(&joystickData, incomingData, sizeof(joystickData));
-}
 
 
 
@@ -293,10 +307,10 @@ void linearlyRefineInputs(int& determinedValue, int currentValue, int Accel)
 
 void adjustInputs()
 {
-  linearlyRefineInputs(det_xValueGas, joystickData.received_xValueGas, ACCELERATION);
-  linearlyRefineInputs(det_yValueGas, joystickData.received_yValueGas, ACCELERATION);
-  linearlyRefineInputs(det_xValueStr, joystickData.received_xValueStr, ACCELERATION);
-  linearlyRefineInputs(det_yValueStr, joystickData.received_yValueStr, ACCELERATION);
+  linearlyRefineInputs(det_xValueGas, xValueGas, ACCELERATION);
+  linearlyRefineInputs(det_yValueGas, yValueGas, ACCELERATION);
+  linearlyRefineInputs(det_xValueStr, xValueStr, ACCELERATION);
+  linearlyRefineInputs(det_yValueStr, yValueStr, ACCELERATION);
 }
 
 
@@ -360,16 +374,9 @@ void omniDrive()
   power = sqrt(det_xValueGas*det_xValueGas + det_yValueGas*det_yValueGas);
   angle = (atan2(det_yValueGas, det_xValueGas) * 180 / PI) - 45;
 
-  //if (power > 255) {power = 255;}
 
   omniX = map((power * cos(angle * PI / 180)), -360, 360, -255, 255);
   omniY = map((-power * sin(angle * PI / 180)*1.3), -360, 360, -255, 255);
-
-  //if (omniX > 249) {omniX = 255;}
-  //else if (omniX < -249) {omniX = -255;}
-
-  //if (omniY > 249) {omniY = 255;}
-  //else if (omniY < -249) {omniY = -255;}
 
 
   outputPwmValues(omniX, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
