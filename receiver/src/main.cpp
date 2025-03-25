@@ -3,9 +3,6 @@
 
 //Kütüphaneler.
 
-#include <SPI.h>
-#include <nRF24L01.h>
-#include <RF24.h>
 #include <Ticker.h>
 #include <esp_now.h>
 #include <WiFi.h>
@@ -101,6 +98,7 @@ int omniY;
 
 float power;
 float angle;
+float turn;
 
 float motorOffsets[4] = {1, 1, 1, 1};
 
@@ -131,26 +129,14 @@ void setPins();
 void omniDrive();
 void omniTurn();
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) ;
+void initESPNow();
+void lockdownCheck();
+
 
 /*---------------------------------------------------------------------*/
 
 
 //Başlancıç fonksiyonları
-
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) 
-{
-  memcpy(&joystickData, incomingData, sizeof(joystickData));
-  xValueGas = map(joystickData.received_xValueGas, 0, 255, -255, 255);
-  yValueGas = map(joystickData.received_yValueGas, 0, 255, -255, 255);
-  xValueStr = map(joystickData.received_xValueStr, 0, 255, -255, 255);
-  yValueStr = map(joystickData.received_yValueStr, 0, 255, -255, 255);
-  if (!dataReceived)
-  {
-    digitalWrite(4, 1);
-  }
-  dataReceived = true;
-}
-
 
 
 void setPins()
@@ -189,6 +175,23 @@ void setPins()
   ledcAttachPin(MOTOR_4_L_PWM, pwmChannel_4L);
 }
 
+void initESPNow()
+{
+  WiFi.mode(WIFI_STA);
+  if (esp_now_init() != ESP_OK) {
+    while (true)
+    {
+      Serial.println("Error initializing ESP-NOW");
+      digitalWrite(4, 0);
+      delay(500);
+      digitalWrite(4, 1);
+      delay(500);
+    }
+    return;
+  }
+  esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+}
+
 
 /*---------------------------------------------------------------------*/
 
@@ -205,48 +208,15 @@ void setup()
 
   setPins();
   adjustInputsTask.start();
-
-  
-  // Init ESP-NOW
-  WiFi.mode(WIFI_STA);
-  if (esp_now_init() != ESP_OK) {
-    while (true)
-    {
-      Serial.println("Error initializing ESP-NOW");
-      digitalWrite(4, 0);
-      delay(500);
-      digitalWrite(4, 1);
-      delay(500);
-    }
-    return;
-  }
-  esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
-
+  initESPNow();
 }
 
 void loop() 
 {
-
-  if (!dataReceived)
-  {
-    if (emergencyLockdownTask.state() == STOPPED) {emergencyLockdownTask.start();}
-    emergencyLockdownTask.update();
-  } 
-  else {if (emergencyLockdownTask.state() == RUNNING) {emergencyLockdownTask.stop();}}
-  
-
-  adjustInputsTask.update();
   printConsoleTask.update();
-  
-  if (abs(det_yValueStr) > 20)
-  {
-    omniTurn();
-  }
-  else
-  {
-    omniDrive();
-  }
-  
+  lockdownCheck();
+  adjustInputsTask.update();
+  omniDrive();
 }
 
 
@@ -288,6 +258,24 @@ void printConsole()
 
   Serial.println("-----------------------------");
 }
+
+
+
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) 
+{
+  memcpy(&joystickData, incomingData, sizeof(joystickData));
+  xValueGas = map(joystickData.received_xValueGas, 0, 255, -255, 255);
+  yValueGas = map(joystickData.received_yValueGas, 0, 255, -255, 255);
+  xValueStr = map(joystickData.received_xValueStr, 0, 255, -255, 255);
+  yValueStr = map(joystickData.received_yValueStr, 0, 255, -255, 255);
+  if (!dataReceived)
+  {
+    digitalWrite(4, 1);
+  }
+  dataReceived = true;
+}
+
+
 
 
 void linearlyRefineInputs(int& determinedValue, int currentValue, int Accel)
@@ -369,37 +357,33 @@ void emergencyLockdown()
   Serial.println("-----------------------------");
 }
 
-void omniDrive()
+void lockdownCheck()  //Bu versiyonda tamamen kırık. Düzeltilecek.
+{
+  if (!dataReceived)
+  {
+    if (emergencyLockdownTask.state() == STOPPED) {emergencyLockdownTask.start();}
+    emergencyLockdownTask.update();
+  } 
+  else {if (emergencyLockdownTask.state() == RUNNING) {emergencyLockdownTask.stop();}}
+}
+
+void omniDrive()  //Şu fonksiyonu yazmaya giden zamanı bi ben bide halil biliyo -y
 {
   power = sqrt(det_xValueGas*det_xValueGas + det_yValueGas*det_yValueGas);
   angle = (atan2(det_yValueGas, det_xValueGas) * 180 / PI) - 45;
+  turn = det_xValueStr;
 
 
-  omniX = map((power * cos(angle * PI / 180)), -360, 360, -255, 255);
-  omniY = map((-power * sin(angle * PI / 180)*1.3), -360, 360, -255, 255);
+  omniX = map(power * cos(angle * PI / 180), -360, 360, -255, 255);
+  omniY = map(-power * sin(angle * PI / 180), -360, 360, -255, 255);
 
+  int motor1 = constrain(omniX + turn, -255, 255);
+  int motor2 = constrain(omniY - turn, -255, 255);  //Lütfen çalışsın
+  int motor3 = constrain(omniX - turn, -255, 255);
+  int motor4 = constrain(omniY + turn, -255, 255);
 
-  outputPwmValues(omniX, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-  outputPwmValues(omniY, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
-  outputPwmValues(omniX, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
-  outputPwmValues(omniY, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
+  outputPwmValues(motor1, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
+  outputPwmValues(motor2, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
+  outputPwmValues(motor3, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
+  outputPwmValues(motor4, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
 }
-
-
-void omniTurn()
-{
-  outputPwmValues(det_yValueStr, pwmChannel_1R, pwmChannel_1L, joystickIdleValue);
-  outputPwmValues(-det_yValueStr, pwmChannel_2R, pwmChannel_2L, joystickIdleValue);
-  outputPwmValues(-det_yValueStr, pwmChannel_3R, pwmChannel_3L, joystickIdleValue);
-  outputPwmValues(det_yValueStr, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
-}
-
-
-
-
-  //Veri gelmediyse, veri alındı mı değişkenini false yap.
-  //Bu değişken, veri alınmadığında acil durum kapatma işlemi yapar.
-  //Kumanda sürekli veri göndermediğinden dolayı runtime'da bu değer sürekli değer değiştirir.
-  //Ancak acil durum fonksiyonu sadece belirli bir süre bu değer false olduğunda çalışır.
-  //Bu sayede kumanda uzun süre veri göndermeyi keserse, araç acil durumda kapanır.
-  //Selamlar samet hocam google işine baksın ben comment değil destan yazarım, Saygılar.
