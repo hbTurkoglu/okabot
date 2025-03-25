@@ -1,3 +1,4 @@
+/*---------------------------------------------------------------------*/
 
 
 //Kütüphaneler.
@@ -5,17 +6,25 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 
+
+/*---------------------------------------------------------------------*/
+
+
 #define DEBUG_MODE false
 
 // NRF24L01 tanımlamaları
-#define CE_PIN 9//anten pinleri sck= 13 mosi = 11  miso = 12 digital
+//anten pinleri sck= 13 mosi = 11  miso = 12 digital
+#define CE_PIN 9
 #define CSN_PIN 10
 
-//Joystick tanımlamaları.
-#define VRX_PIN_GAS 0//joystick pinleri analog
+//Joystick (analog pin) tanımlamaları.
+#define VRX_PIN_GAS 0 
 #define VRY_PIN_GAS 1
 #define VRX_PIN_STR 2   
 #define VRY_PIN_STR 3
+
+
+/*---------------------------------------------------------------------*/
 
 
 //Joystick değişkenleri.
@@ -34,6 +43,32 @@ const byte address[6] = "00031";
 byte data[4];
 
 
+/*---------------------------------------------------------------------*/
+
+
+// prototipler
+
+void startRadio()
+void sendData()
+
+
+
+// Başlancıç fonksiyonları
+void startRadio()
+{
+  radio.begin();
+  radio.setDataRate(RF24_250KBPS);
+  radio.openWritingPipe(address);
+  radio.setPALevel(1);
+  radio.stopListening();
+}
+
+
+/*---------------------------------------------------------------------*/
+
+
+//Görev fonksiyonları
+
 void setup() 
 {
   #if DEBUG_MODE
@@ -50,16 +85,10 @@ void loop()
 }
 
 
-void startRadio()
-{
-  radio.begin();
-  radio.setDataRate(RF24_250KBPS);
-  radio.openWritingPipe(address);
-  radio.setPALevel(1);
-  radio.stopListening();
-}
+/*---------------------------------------------------------------------*/
 
 
+//Döngü fonksiyonları
 
 
 void sendData()
@@ -91,3 +120,6 @@ void sendData()
     #endif
     
 }
+
+
+/*---------------------------------------------------------------------*/
