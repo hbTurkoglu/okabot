@@ -105,8 +105,6 @@ float motorOffsets[4] = {1, 1, 1, 1};
 /*---------------------------------------------------------------------*/
 
 //Objeler.
-RF24 radio(CE_PIN, CSN_PIN);
-
 
 const byte address[6] = "00031"; // Haberleşme adresi
 uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBC, 0x15, 0xF4}; // Kumanda mac adresi
