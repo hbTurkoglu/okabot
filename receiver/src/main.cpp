@@ -5,6 +5,7 @@
 
 #include <Ticker.h>
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 
 /*---------------------------------------------------------------------*/
@@ -38,6 +39,7 @@
 
 #define MAX_POWER 80
 #define SLOWDOWNZONE 40 // MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir. 6 sürücü bundan yandı sefaya söylemeyin.
+#define MOTION_START 10
 
 #define SPEED_ADJUSTING_FREQ 1
 #define ACCELERATION 1
@@ -101,7 +103,9 @@ float power;
 float angle;
 float turn;
 
-float motorOffsets[4] = {1, 1, 1, 1};
+float motorOffsets[4] = {0.913, 1.11, 0.930, 1.11};
+float motorOffsets_reverse[4] = {1.20, 1.2, 1.11, 1.40};
+
 
 /*---------------------------------------------------------------------*/
 
@@ -113,7 +117,7 @@ byte data[4];
 
 typedef struct
 {
-  int received_xValueGas = 0, received_yValueGas = 0, received_xValueStr = 0, received_yValueStr = 0;
+  int sent_xValueGas = 0, sent_yValueGas = 0, sent_xValueStr = 0, sent_yValueStr = 0;
 } JoystickData;
 
 JoystickData joystickData;
@@ -125,7 +129,6 @@ esp_now_peer_info_t peerInfo;
 // prototipler
 void setPins();
 void omniDrive();
-void omniTurn();
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
 void initESPNow();
 void lockdownCheck();
@@ -185,6 +188,7 @@ void initESPNow()
     return;
   }
   esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
+  esp_wifi_set_max_tx_power(78);
 }
 
 /*---------------------------------------------------------------------*/
@@ -253,10 +257,10 @@ void printConsole()
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
   memcpy(&joystickData, incomingData, sizeof(joystickData));
-  xValueGas = map(joystickData.received_xValueGas, 0, 255, -255, 255);
-  yValueGas = map(joystickData.received_yValueGas, 0, 255, -255, 255);
-  xValueStr = map(joystickData.received_xValueStr, 0, 255, -255, 255);
-  yValueStr = map(joystickData.received_yValueStr, 0, 255, -255, 255);
+  xValueGas = map(joystickData.sent_xValueGas, 0, 1023, -255, 255);
+  yValueGas = map(joystickData.sent_yValueGas, 0, 1023, -255, 255);
+  xValueStr = map(joystickData.sent_xValueStr, 0, 1023, -255, 255);
+  yValueStr = map(joystickData.sent_yValueStr, 0, 1023, -255, 255);
   digitalWrite(4, 1);
   dataReceived = true;
 }
@@ -287,6 +291,7 @@ void adjustInputs()
 void outputPwmValues(int input, int channel_R, int channel_L, int middlePoint)
 {
   float currentOffset = motorOffsets[((channel_L + 1) / 2) - 1];
+  float currentOffset_reverse = motorOffsets_reverse[((channel_L + 1) / 2) - 1];
 
   if (input > middlePoint)
   {
@@ -302,7 +307,7 @@ void outputPwmValues(int input, int channel_R, int channel_L, int middlePoint)
     }
     else
     {
-      R_value = map((input - middlePoint) * (input - middlePoint), 0, SLOWDOWNZONE * SLOWDOWNZONE, 0, SLOWDOWNZONE);
+      R_value = map((input - middlePoint) * (input - middlePoint), 0, SLOWDOWNZONE * SLOWDOWNZONE, MOTION_START, SLOWDOWNZONE);
     }
     ledcWrite(channel_R, R_value * currentOffset);
   }
@@ -320,9 +325,9 @@ void outputPwmValues(int input, int channel_R, int channel_L, int middlePoint)
     }
     else
     {
-      L_value = map((input - middlePoint) * (input - middlePoint), 0, -SLOWDOWNZONE * SLOWDOWNZONE, 0, SLOWDOWNZONE);
+      L_value = map((input - middlePoint) * (input - middlePoint), 0, -SLOWDOWNZONE * SLOWDOWNZONE, MOTION_START, SLOWDOWNZONE);
     }
-    ledcWrite(channel_L, L_value * currentOffset);
+    ledcWrite(channel_L, L_value * currentOffset_reverse);
   }
 }
 
@@ -355,6 +360,7 @@ void lockdownCheck() // Bu versiyonda tamamen kırık. Düzeltilecek.
       emergencyLockdownTask.stop();
     }
   }
+  dataReceived = false;
 }
 
 void omniDrive() // Şu fonksiyonu yazmaya giden zamanı bi ben bide halil biliyo -y

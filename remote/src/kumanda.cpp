@@ -3,6 +3,7 @@
 
 //Kütüphaneler.
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 
 
@@ -30,7 +31,7 @@ uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBD, 0x32, 0x0C};
 
 
 typedef struct JoystickData{
-  int received_xValueGas = 0, received_yValueGas = 0, received_xValueStr = 0, received_yValueStr = 0;
+  int sent_xValueGas = 0, sent_yValueGas = 0, sent_xValueStr = 0, sent_yValueStr = 0;
 } JoystickData;
 
 JoystickData joystickData;
@@ -47,7 +48,6 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 // prototipler
 
-void startRadio();
 void sendData();
 
 
@@ -85,6 +85,7 @@ void setup()
     }
   }
 
+  esp_wifi_set_max_tx_power(78);
   esp_now_register_send_cb(OnDataSent);
 
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
@@ -119,10 +120,10 @@ void sendData()
     yValueStr = analogRead(VRY_PIN_STR);
 
     //Verileri sıkıştır ve değişkenlere ata.
-    joystickData.received_xValueGas = map(xValueGas, 0, 1023, 0, 255) + 16;
-    joystickData.received_yValueGas = map(yValueGas, 0, 1023, 0, 255) + 16;
-    joystickData.received_xValueStr = map(xValueStr, 0, 1023, 0, 255) + 16;
-    joystickData.received_yValueStr = map(yValueStr, 0, 1023, 0, 255) + 16;
+    joystickData.sent_xValueGas = map(xValueGas, 0, 1023, 0, 1023) + 57;
+    joystickData.sent_yValueGas = map(yValueGas, 0, 1023, 0, 1023) + 57;
+    joystickData.sent_xValueStr = map(xValueStr, 0, 1023, 0, 1023) + 57;
+    joystickData.sent_yValueStr = map(yValueStr, 0, 1023, 0, 1023) + 57;
 
     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &joystickData, sizeof(joystickData));
     
@@ -136,13 +137,13 @@ void sendData()
     
     #if DEBUG_MODE
       Serial.print("xg = ");
-      Serial.println(joystickData.received_xValueGas);
+      Serial.println(joystickData.sent_xValueGas);
       Serial.print("yg = ");
-      Serial.println(joystickData.received_yValueGas);
+      Serial.println(joystickData.sent_yValueGas);
       Serial.print("xs = ");
-      Serial.println(joystickData.received_xValueStr);
+      Serial.println(joystickData.sent_xValueStr);
       Serial.print("ys = ");
-      Serial.println(joystickData.received_yValueStr);
+      Serial.println(joystickData.sent_yValueStr);
       Serial.println("\n");
     #endif
     
