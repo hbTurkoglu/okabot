@@ -12,10 +12,6 @@
 
 #define DEBUG_MODE true
 
-// NRF24L01 tanımlamaları
-
-#define CE_PIN 2
-#define CSN_PIN 13
 
 // Motor pin tanımlamaları.
 
@@ -33,13 +29,19 @@
 
 #define ENABLE_PIN 21
 
-#define CHARGE_PIN 34
+#define BATTERY_PIN 34
+
+#define DB_PIN_R 42
+#define DB_PIN_G 42
+#define DB_PIN_B 42
+
+#define CHASIS_MIDDLE_DIST 42
 
 // parametreler
 
-#define MAX_POWER 80
-#define SLOWDOWNZONE 40 // MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir. 6 sürücü bundan yandı sefaya söylemeyin.
-#define MOTION_START 10
+#define MAX_POWER 127
+#define SLOWDOWNZONE 40 // MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir.
+#define MOTION_START 10 // Büyüdükçe harekete daha erken başlar ama hassaslık azalır.
 
 #define SPEED_ADJUSTING_FREQ 1
 #define ACCELERATION 1
@@ -52,6 +54,12 @@
 
 void adjustInputs();
 Ticker adjustInputsTask(adjustInputs, SPEED_ADJUSTING_FREQ, 0, MILLIS); // Girişleri oku
+
+void pp_findSpot_CB();
+Ticker pp_findSpotTask(pp_findSpot_CB, 10, 0, MILLIS);
+
+void pp_parkToSpot_CB();
+Ticker pp_ParkToSpotTask(pp_parkToSpot_CB, 10, 0, MILLIS);
 
 void emergencyLockdown();
 Ticker emergencyLockdownTask(emergencyLockdown, LOCKDOWN_TIME, 0, MILLIS); // Acil durum kapatma
@@ -103,17 +111,26 @@ float power;
 float angle;
 float turn;
 
-float motorOffsets[4] = {0.913, 1.11, 0.930, 1.11};
-float motorOffsets_reverse[4] = {1.20, 1.2, 1.11, 1.40};
+float deactivateInput = false;
+
+float motorOffsets[4] = {0.98, 1.105, 0.930, 1.102};
+float motorOffsets_reverse[4] = {1.13, 1.2, 1.1, 1.25};
+
+#define SENSOR_COUNT 8
+byte arduinoDistances[SENSOR_COUNT];
+int safeDistance = 35;
+
+
+unsigned long pp_spotStartTime;
+unsigned long pp_spotEndTime;
+
 
 
 /*---------------------------------------------------------------------*/
 
 // Objeler.
 
-const byte address[6] = "00031";                                   // Haberleşme adresi
 uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBC, 0x15, 0xF4}; // Kumanda mac adresi
-byte data[4];
 
 typedef struct
 {
@@ -140,6 +157,9 @@ void lockdownCheck();
 void setPins()
 {
   pinMode(4, OUTPUT);
+  pinMode(DB_PIN_R, OUTPUT);
+  pinMode(DB_PIN_G, OUTPUT);
+  pinMode(DB_PIN_B, OUTPUT);
   pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(4, 0);
   digitalWrite(ENABLE_PIN, 1);
@@ -197,32 +217,63 @@ void initESPNow()
 
 void setup()
 {
-#if DEBUG_MODE
-  Serial.begin(9600);
-  printConsoleTask.start();
-#endif
+  #if DEBUG_MODE
+    Serial.begin(9600);
+    printConsoleTask.start();
+  #endif
 
   setPins();
+  Serial2.begin(9600, SERIAL_8N1, 16, 17);
   adjustInputsTask.start();
   initESPNow();
 }
 
 void loop()
 {
+  getArduinoData();
   printConsoleTask.update();
   lockdownCheck();
   adjustInputsTask.update();
   omniDrive();
+  if (pp_findSpotTask.state() == RUNNING)
+  {pp_findSpotTask.update();}
+  if (pp_ParkToSpotTask.state() == RUNNING)
+  {pp_ParkToSpotTask.update();}
 }
 
 /*---------------------------------------------------------------------*/
 
 // Döngü fonksiyonları
 
+
+void getArduinoData()
+{
+  if (Serial2.available() >= 8)
+  {
+    Serial2.readBytes(arduinoDistances, 8);
+    digitalWrite(DB_PIN_B, 1);
+  }
+  else
+  {
+    digitalWrite(DB_PIN_B, 0);
+  }
+}
+
+
+
 void printConsole()
 {
   Serial.println("-----------------------------");
-/*
+
+
+  for (int i = 0; i < 8; i++)
+  {
+    Serial.print(i);
+    Serial.print(". Sensor: ");
+    Serial1.println(arduinoDistances[i]);
+  }
+
+  /*
   Serial.print("det_xValueGas: ");
   Serial.println(det_xValueGas);
   Serial.print("det_xValueStr: ");
@@ -239,7 +290,7 @@ void printConsole()
   Serial.println("omniY: ");
   Serial.println(omniY);
 
-  Serial.print("\n\n");
+  Serial.print("\n\nangle");
   Serial.println(angle);
 
   Serial.print("\n\n");
@@ -247,9 +298,9 @@ void printConsole()
   Serial.println(power * cos(angle * PI / 180));
   Serial.print("sin: ");
   Serial.println(-power * sin(angle * PI / 180));
-*/
-  Serial.print("chargeInfo: ");
-  Serial.println(chargeInfo);
+
+  Serial.print("chargeInfo: %");
+  Serial.println(chargeInfo); */
 
   Serial.println("-----------------------------");
 }
@@ -257,10 +308,15 @@ void printConsole()
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
   memcpy(&joystickData, incomingData, sizeof(joystickData));
-  xValueGas = map(joystickData.sent_xValueGas, 0, 1023, -255, 255);
-  yValueGas = map(joystickData.sent_yValueGas, 0, 1023, -255, 255);
-  xValueStr = map(joystickData.sent_xValueStr, 0, 1023, -255, 255);
-  yValueStr = map(joystickData.sent_yValueStr, 0, 1023, -255, 255);
+
+  if (!deactivateInput)
+  {
+    xValueGas = map(joystickData.sent_xValueGas, 0, 1023, -255, 255);
+    yValueGas = map(joystickData.sent_yValueGas, 0, 1023, -255, 255);
+    xValueStr = map(joystickData.sent_xValueStr, 0, 1023, -255, 255);
+    yValueStr = map(joystickData.sent_yValueStr, 0, 1023, -255, 255);
+  }
+
   digitalWrite(4, 1);
   dataReceived = true;
 }
@@ -343,7 +399,7 @@ void emergencyLockdown()
   Serial.println("-----------------------------");
 }
 
-void lockdownCheck() // Bu versiyonda tamamen kırık. Düzeltilecek.
+void lockdownCheck()
 {
   if (!dataReceived)
   {
@@ -360,20 +416,20 @@ void lockdownCheck() // Bu versiyonda tamamen kırık. Düzeltilecek.
       emergencyLockdownTask.stop();
     }
   }
-  dataReceived = false;
+  dataReceived = false; //kontrol bool'unu sıfırla
 }
 
 void omniDrive() // Şu fonksiyonu yazmaya giden zamanı bi ben bide halil biliyo -y
 {
   power = sqrt(det_xValueGas * det_xValueGas + det_yValueGas * det_yValueGas);
   angle = (atan2(det_yValueGas, det_xValueGas) * 180 / PI) - 45;
-  turn = det_xValueStr;
+  turn = constrain(det_xValueStr, -144, 144);
 
   omniX = map(power * cos(angle * PI / 180), -360, 360, -255, 255);
   omniY = map(-power * sin(angle * PI / 180), -360, 360, -255, 255);
 
   int motor1 = constrain(omniX + turn, -255, 255);
-  int motor2 = constrain(omniY - turn, -255, 255); // Lütfen çalışsın
+  int motor2 = constrain(omniY - turn, -255, 255);
   int motor3 = constrain(omniX - turn, -255, 255);
   int motor4 = constrain(omniY + turn, -255, 255);
 
@@ -385,8 +441,83 @@ void omniDrive() // Şu fonksiyonu yazmaya giden zamanı bi ben bide halil biliy
 
 void chargeCheck()
 {
+  chargeValue = analogRead(BATTERY_PIN);
+  chargeInfo = map(chargeValue, 3200, 4095, 0, 100); 
+}
 
-  chargeValue = analogRead(CHARGE_PIN);
-  chargeInfo = map(chargeValue, 3200, 4095, 0, 100);
-  
+
+void dampenInput(int input, int index, bool sign)
+{
+  if (sign)
+  {
+    input -= constrain((input * (2 / arduinoDistances[index])), 0, input);
+  }
+  else
+  {
+    input += constrain((input * (2 / arduinoDistances[index])), input, 0);
+  }
+
+}
+
+
+void assistedDriving()
+{
+  for (int i = 0; i <= SENSOR_COUNT-1; i++)
+  {
+    if (arduinoDistances[i] < safeDistance)
+    {
+      switch (i)
+      {
+        case 0:
+        dampenInput(det_yValueGas, i, true);
+
+        case 1:
+        dampenInput(det_xValueGas, i, true);
+
+        case 2:
+        dampenInput(det_yValueGas, i, false);
+
+        case 3:
+        dampenInput(det_xValueGas, i,false);
+      }
+    }
+  }
+}
+
+
+void startParallelParking()
+{
+
+  if ((abs(yValueGas) < 10) && (abs(xValueGas) <10))
+  {return;}
+
+  else
+  {
+    deactivateInput = true; //kumandadan kontrolü zorla geri almanın bi yolunu ekle.
+    yValueGas = (abs(yValueGas) / yValueGas) * 50;
+    pp_findSpotTask.start();
+    pp_spotStartTime = millis();
+  }
+}
+
+
+void pp_findSpot_CB()
+{
+  if ((arduinoDistances[1] > 30) && (millis() - pp_spotStartTime > CHASIS_MIDDLE_DIST))
+  {
+    yValueGas = 0;
+    xValueGas = (abs(xValueGas) / xValueGas) * 50; //hatalı, düzelt
+    pp_ParkToSpotTask.start();
+    pp_findSpotTask.stop();
+  }
+}
+
+void pp_parkToSpot_CB()
+{
+  if (arduinoDistances[1] < 5)
+  {
+    xValueGas = 0;
+    deactivateInput = false;
+    pp_ParkToSpotTask.stop();
+  }
 }

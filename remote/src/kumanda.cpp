@@ -120,10 +120,10 @@ void sendData()
     yValueStr = analogRead(VRY_PIN_STR);
 
     //Verileri sıkıştır ve değişkenlere ata.
-    joystickData.sent_xValueGas = map(xValueGas, 0, 1023, 0, 1023) + 57;
-    joystickData.sent_yValueGas = map(yValueGas, 0, 1023, 0, 1023) + 57;
-    joystickData.sent_xValueStr = map(xValueStr, 0, 1023, 0, 1023) + 57;
-    joystickData.sent_yValueStr = map(yValueStr, 0, 1023, 0, 1023) + 57;
+    joystickData.sent_xValueGas = xValueGas + 57;
+    joystickData.sent_yValueGas = yValueGas + 57;
+    joystickData.sent_xValueStr = xValueStr + 57;
+    joystickData.sent_yValueStr = yValueStr + 57;
 
     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &joystickData, sizeof(joystickData));
     
