@@ -17,6 +17,12 @@
 #define VRY_PIN_STR 35
 
 
+#define AD_BUTTON 23
+#define PP_BUTTON 22
+
+bool assistedDrivingBool = false;
+bool parallelParking = false;
+
 
 /*---------------------------------------------------------------------*/
 
@@ -32,6 +38,8 @@ uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBD, 0x32, 0x0C};
 
 typedef struct JoystickData{
   int sent_xValueGas = 0, sent_yValueGas = 0, sent_xValueStr = 0, sent_yValueStr = 0;
+  bool parallelParking = false;
+  bool assistedDriving = false;
 } JoystickData;
 
 JoystickData joystickData;
@@ -102,6 +110,26 @@ void setup()
 void loop()
 {
   sendData();
+
+
+  if (digitalRead(AD_BUTTON) == 1 && !assistedDrivingBool)
+  {
+    assistedDrivingBool = true;
+  }
+  else if (digitalRead(AD_BUTTON) == 1 && assistedDrivingBool)
+  {
+    assistedDrivingBool = false;
+  }
+
+
+  if (digitalRead(PP_BUTTON) == 1 && !parallelParking)
+  {
+    parallelParking = false;
+  }
+  else if (digitalRead(PP_BUTTON) && parallelParking)
+  {
+    parallelParking = true;
+  }
 }
 
 

@@ -29,13 +29,21 @@
 
 #define ENABLE_PIN 21
 
+#define PP_BUTTON 9
+#define AD_BUTTON 9
+
 #define BATTERY_PIN 34
 
-#define DB_PIN_R 42
-#define DB_PIN_G 42
-#define DB_PIN_B 42
+#define FRONT_SENSOR 0
+#define RIGHT_SENSOR 1
+#define BACK_SENSOR 2
+#define LEFT_SENSOR 3
 
-#define CHASIS_MIDDLE_DIST 42
+#define DB_PIN_R 2
+#define DB_PIN_G 18
+#define DB_PIN_B 5
+
+#define CHASIS_MIDDLE_DIST 99999999
 
 // parametreler
 
@@ -66,7 +74,7 @@ Ticker emergencyLockdownTask(emergencyLockdown, LOCKDOWN_TIME, 0, MILLIS); // Ac
 bool dataReceived = false;
 
 void printConsole();
-Ticker printConsoleTask(printConsole, 500);
+Ticker printConsoleTask(printConsole, 1500);
 
 void chargeCheck();
 Ticker chargeCheckTask(chargeCheck, 1000, 0, MILLIS); // Şarj kontrolü
@@ -111,12 +119,14 @@ float power;
 float angle;
 float turn;
 
-float deactivateInput = false;
+bool deactivateInput = false;
+bool parallelParking = false;
+bool assistedDrivingBool = false;
 
 float motorOffsets[4] = {0.98, 1.105, 0.930, 1.102};
 float motorOffsets_reverse[4] = {1.13, 1.2, 1.1, 1.25};
 
-#define SENSOR_COUNT 8
+#define SENSOR_COUNT 4
 byte arduinoDistances[SENSOR_COUNT];
 int safeDistance = 35;
 
@@ -149,6 +159,7 @@ void omniDrive();
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
 void initESPNow();
 void lockdownCheck();
+void getArduinoData();
 
 /*---------------------------------------------------------------------*/
 
@@ -157,6 +168,7 @@ void lockdownCheck();
 void setPins()
 {
   pinMode(4, OUTPUT);
+  pinMode(2, OUTPUT);
   pinMode(DB_PIN_R, OUTPUT);
   pinMode(DB_PIN_G, OUTPUT);
   pinMode(DB_PIN_B, OUTPUT);
@@ -239,6 +251,12 @@ void loop()
   {pp_findSpotTask.update();}
   if (pp_ParkToSpotTask.state() == RUNNING)
   {pp_ParkToSpotTask.update();}
+
+
+  if (assistedDriving)
+  {
+    assistedDriving();
+  }
 }
 
 /*---------------------------------------------------------------------*/
@@ -248,14 +266,16 @@ void loop()
 
 void getArduinoData()
 {
-  if (Serial2.available() >= 8)
+  if (Serial2.available() >= 4)
   {
-    Serial2.readBytes(arduinoDistances, 8);
+    Serial2.readBytes(arduinoDistances, 4);
     digitalWrite(DB_PIN_B, 1);
+    //digitalWrite(2, 1);
   }
   else
   {
     digitalWrite(DB_PIN_B, 0);
+    //digitalWrite(2, 0);
   }
 }
 
@@ -266,11 +286,11 @@ void printConsole()
   Serial.println("-----------------------------");
 
 
-  for (int i = 0; i < 8; i++)
+  for (int i = 0; i <= 3; i++)
   {
     Serial.print(i);
     Serial.print(". Sensor: ");
-    Serial1.println(arduinoDistances[i]);
+    Serial.println(arduinoDistances[i]);
   }
 
   /*
@@ -469,21 +489,23 @@ void assistedDriving()
       switch (i)
       {
         case 0:
-        dampenInput(det_yValueGas, i, true);
+        dampenInput(yValueGas, i, true);
 
         case 1:
-        dampenInput(det_xValueGas, i, true);
+        dampenInput(xValueGas, i, true);
 
         case 2:
-        dampenInput(det_yValueGas, i, false);
+        dampenInput(yValueGas, i, false);
 
         case 3:
-        dampenInput(det_xValueGas, i,false);
+        dampenInput(xValueGas, i,false);
       }
     }
   }
 }
 
+
+int xValueGasSign;
 
 void startParallelParking()
 {
@@ -493,8 +515,10 @@ void startParallelParking()
 
   else
   {
+    parallelParking = true;
     deactivateInput = true; //kumandadan kontrolü zorla geri almanın bi yolunu ekle.
     yValueGas = (abs(yValueGas) / yValueGas) * 50;
+    xValueGasSign = (abs(xValueGas) / xValueGas);
     pp_findSpotTask.start();
     pp_spotStartTime = millis();
   }
@@ -503,10 +527,10 @@ void startParallelParking()
 
 void pp_findSpot_CB()
 {
-  if ((arduinoDistances[1] > 30) && (millis() - pp_spotStartTime > CHASIS_MIDDLE_DIST))
+  if ((arduinoDistances[RIGHT_SENSOR] > 30) && (millis() - pp_spotStartTime > CHASIS_MIDDLE_DIST))
   {
     yValueGas = 0;
-    xValueGas = (abs(xValueGas) / xValueGas) * 50; //hatalı, düzelt
+    xValueGas = xValueGasSign * 50;
     pp_ParkToSpotTask.start();
     pp_findSpotTask.stop();
   }
@@ -514,7 +538,7 @@ void pp_findSpot_CB()
 
 void pp_parkToSpot_CB()
 {
-  if (arduinoDistances[1] < 5)
+  if (arduinoDistances[RIGHT_SENSOR] < 5)
   {
     xValueGas = 0;
     deactivateInput = false;
