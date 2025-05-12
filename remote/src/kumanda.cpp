@@ -5,7 +5,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <WiFi.h>
-
+#include <Ticker.h>
 
 #define DEBUG_MODE true
 
@@ -20,8 +20,13 @@
 #define AD_BUTTON 23
 #define PP_BUTTON 22
 
+void checkButtonCB();
+Ticker checkButtonTicker(checkButtonCB, 50);
+
 bool assistedDrivingBool = false;
-bool parallelParking = false;
+bool assistedDrivingBoolReleased = false;
+bool parallelParkingBool = false;
+bool parallelParkingBoolReleased = false;
 
 
 /*---------------------------------------------------------------------*/
@@ -38,8 +43,8 @@ uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBD, 0x32, 0x0C};
 
 typedef struct JoystickData{
   int sent_xValueGas = 0, sent_yValueGas = 0, sent_xValueStr = 0, sent_yValueStr = 0;
-  bool parallelParking = false;
-  bool assistedDriving = false;
+  bool sent_parallelParking = false;
+  bool sent_assistedDriving = false;
 } JoystickData;
 
 JoystickData joystickData;
@@ -62,24 +67,8 @@ void sendData();
 
 // Başlancıç fonksiyonları
 
-
-/*---------------------------------------------------------------------*/
-
-
-//Görev fonksiyonları
-
-void setup() 
+void initESPNow() 
 {
-  #if DEBUG_MODE
-    Serial.begin(9600);
-  #endif
-
-    analogReadResolution(10);
-
-  
-
-  WiFi.mode(WIFI_STA);
-
   // Init ESP-NOW
   if (esp_now_init() != ESP_OK) 
   {
@@ -105,31 +94,43 @@ void setup()
     Serial.println("Failed to add peer");
     return;
   }
+  WiFi.mode(WIFI_STA);
+}
+
+
+void setPins()
+{
+  analogReadResolution(10);
+  pinMode(VRX_PIN_GAS, INPUT);
+  pinMode(VRY_PIN_GAS, INPUT);
+  pinMode(VRX_PIN_STR, INPUT);
+  pinMode(VRY_PIN_STR, INPUT);
+
+  pinMode(AD_BUTTON, INPUT);
+  pinMode(PP_BUTTON, INPUT);
+}
+
+/*---------------------------------------------------------------------*/
+
+
+//Görev fonksiyonları
+
+void setup() 
+{
+  #if DEBUG_MODE
+    Serial.begin(9600);
+  #endif
+
+  setPins();
+  initESPNow();
+
+  checkButtonTicker.start();
 }
 
 void loop()
 {
   sendData();
-
-
-  if (digitalRead(AD_BUTTON) == 1 && !assistedDrivingBool)
-  {
-    assistedDrivingBool = true;
-  }
-  else if (digitalRead(AD_BUTTON) == 1 && assistedDrivingBool)
-  {
-    assistedDrivingBool = false;
-  }
-
-
-  if (digitalRead(PP_BUTTON) == 1 && !parallelParking)
-  {
-    parallelParking = false;
-  }
-  else if (digitalRead(PP_BUTTON) && parallelParking)
-  {
-    parallelParking = true;
-  }
+  checkButtonTicker.update();
 }
 
 
@@ -139,6 +140,44 @@ void loop()
 
 //Döngü fonksiyonları
 
+
+void checkButtonCB()
+{
+  if (digitalRead(AD_BUTTON) == 0 && !assistedDrivingBoolReleased)
+  {
+    assistedDrivingBoolReleased = true;
+  }
+
+  if (digitalRead(AD_BUTTON) == 1 && !assistedDrivingBool && assistedDrivingBoolReleased)
+  {
+    assistedDrivingBoolReleased = false;
+    assistedDrivingBool = true;
+  }
+  else if (digitalRead(AD_BUTTON) == 1 && assistedDrivingBool && assistedDrivingBoolReleased)
+  {
+    assistedDrivingBoolReleased = false;
+    assistedDrivingBool = false;
+  }
+
+
+
+  if (digitalRead(PP_BUTTON) == 0 && !parallelParkingBoolReleased)
+  {
+    parallelParkingBoolReleased = true;
+  }
+
+  if (digitalRead(PP_BUTTON) == 1 && !parallelParkingBool && assistedDrivingBoolReleased)
+  {
+    parallelParkingBoolReleased = false;
+    parallelParkingBool = true;
+  }
+  else if (digitalRead(PP_BUTTON) == 1 && parallelParkingBool && assistedDrivingBoolReleased)
+  {
+    parallelParkingBoolReleased = false;
+    parallelParkingBool = false;
+  }
+
+}
 
 void sendData()
 {
@@ -152,6 +191,9 @@ void sendData()
     joystickData.sent_yValueGas = yValueGas + 57;
     joystickData.sent_xValueStr = xValueStr + 57;
     joystickData.sent_yValueStr = yValueStr + 57;
+
+    joystickData.sent_assistedDriving = assistedDrivingBool;
+    joystickData.sent_parallelParking = parallelParkingBool;
 
     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &joystickData, sizeof(joystickData));
     

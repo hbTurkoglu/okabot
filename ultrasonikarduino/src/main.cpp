@@ -1,29 +1,28 @@
 #include <Arduino.h>
-#include <SoftwareSerial.h>
-#include <Ticker.h>
 
 #define TRIG 2
 
 #define SOUND_SPEED 0.034
 
-#define SENSOR_COUNT 4
+#define SENSOR_COUNT 6
 
-byte echoes[SENSOR_COUNT] = {3, 4, 5, 6};
-byte distances[SENSOR_COUNT] = {12, 13, 14, 15};
+byte echoes[SENSOR_COUNT] = {3, 4, 5, 6, 7, 8};
+byte distances[SENSOR_COUNT] = {0, 0, 0, 0, 0, 0};
 
 
 
-int readDistance(int echo);
+byte readDistance(int echo);
 void scanSensors(int freq);
 
 void setup() 
 {
   Serial.begin(9600);
   pinMode(TRIG, OUTPUT);
-  pinMode(echoes[0], INPUT);
-  pinMode(echoes[1], INPUT);
-  pinMode(echoes[2], INPUT);
-  pinMode(echoes[3], INPUT);
+
+  for(int i = 0; i < SENSOR_COUNT; i++)
+  {
+    pinMode(echoes[i], OUTPUT);
+  }
 }
 
 void loop() 
@@ -34,18 +33,14 @@ void loop()
 
 void scanSensors(int freq)
 {
-  distances[0] = readDistance(echoes[0]);
-  delay(freq/SENSOR_COUNT);
-  distances[1] = readDistance(echoes[1]);
-  delay(freq/SENSOR_COUNT);
-  distances[2] = readDistance(echoes[2]);
-  delay(freq/SENSOR_COUNT);
-  distances[3] = readDistance(echoes[3]);
-  delay(freq/SENSOR_COUNT);
-  
+  for (int i = 0; i < SENSOR_COUNT; i++)
+  {
+    distances[i] = readDistance(echoes[i]);
+    delay(freq/SENSOR_COUNT);
+  }
 }
 
-int readDistance(int echo)
+byte readDistance(int echo)
 {
   digitalWrite(TRIG, LOW);
   delayMicroseconds(2);
@@ -54,7 +49,7 @@ int readDistance(int echo)
   digitalWrite(TRIG, LOW);
 
   unsigned long duration = pulseIn(echo, HIGH);
-  int distance = constrain(((duration * SOUND_SPEED) / 2), 0, 40);
+  byte distance = constrain(((duration * SOUND_SPEED) / 2), 0, 40);
   return distance;
 }
 

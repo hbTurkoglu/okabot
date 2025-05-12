@@ -34,14 +34,16 @@
 
 #define BATTERY_PIN 34
 
-#define FRONT_SENSOR 0
-#define RIGHT_SENSOR 1
-#define BACK_SENSOR 2
-#define LEFT_SENSOR 3
-
 #define DB_PIN_R 2
 #define DB_PIN_G 18
 #define DB_PIN_B 5
+
+#define FRONT_SENSOR 0
+#define RIGHT_FRONT_SENSOR 1
+#define RIGHT_REAR_SENSOR 2
+#define REAR_SENSOR 3
+#define LEFT_FRONT_SENSOR 4
+#define LEFT_REAR_SENSOR 5
 
 #define CHASIS_MIDDLE_DIST 99999999
 
@@ -120,13 +122,13 @@ float angle;
 float turn;
 
 bool deactivateInput = false;
-bool parallelParking = false;
+bool parallelParkingBool = false;
 bool assistedDrivingBool = false;
 
 float motorOffsets[4] = {0.98, 1.105, 0.930, 1.102};
 float motorOffsets_reverse[4] = {1.13, 1.2, 1.1, 1.25};
 
-#define SENSOR_COUNT 4
+#define SENSOR_COUNT 6
 byte arduinoDistances[SENSOR_COUNT];
 int safeDistance = 35;
 
@@ -145,6 +147,8 @@ uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBC, 0x15, 0xF4}; // Kumanda ma
 typedef struct
 {
   int sent_xValueGas = 0, sent_yValueGas = 0, sent_xValueStr = 0, sent_yValueStr = 0;
+  bool sent_parallelParking = false;
+  bool sent_assistedDriving = false;
 } JoystickData;
 
 JoystickData joystickData;
@@ -253,7 +257,7 @@ void loop()
   {pp_ParkToSpotTask.update();}
 
 
-  if (assistedDriving)
+  if (assistedDrivingBool)
   {
     assistedDriving();
   }
@@ -270,12 +274,10 @@ void getArduinoData()
   {
     Serial2.readBytes(arduinoDistances, 4);
     digitalWrite(DB_PIN_B, 1);
-    //digitalWrite(2, 1);
   }
   else
   {
     digitalWrite(DB_PIN_B, 0);
-    //digitalWrite(2, 0);
   }
 }
 
@@ -286,7 +288,7 @@ void printConsole()
   Serial.println("-----------------------------");
 
 
-  for (int i = 0; i <= 3; i++)
+  for (int i = 0; i < SENSOR_COUNT; i++)
   {
     Serial.print(i);
     Serial.print(". Sensor: ");
@@ -336,6 +338,9 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
     xValueStr = map(joystickData.sent_xValueStr, 0, 1023, -255, 255);
     yValueStr = map(joystickData.sent_yValueStr, 0, 1023, -255, 255);
   }
+
+  parallelParkingBool = joystickData.sent_parallelParking;
+  assistedDrivingBool = joystickData.sent_assistedDriving;
 
   digitalWrite(4, 1);
   dataReceived = true;
@@ -515,8 +520,7 @@ void startParallelParking()
 
   else
   {
-    parallelParking = true;
-    deactivateInput = true; //kumandadan kontrolü zorla geri almanın bi yolunu ekle.
+    deactivateInput = true; //bi ara kumandadan kontrolü zorla geri almanın bi yolunu ekle.
     yValueGas = (abs(yValueGas) / yValueGas) * 50;
     xValueGasSign = (abs(xValueGas) / xValueGas);
     pp_findSpotTask.start();
@@ -527,7 +531,10 @@ void startParallelParking()
 
 void pp_findSpot_CB()
 {
-  if ((arduinoDistances[RIGHT_SENSOR] > 30) && (millis() - pp_spotStartTime > CHASIS_MIDDLE_DIST))
+  byte firstSensor;
+  byte secondSensor;
+
+  if (xValueGas > 0)
   {
     yValueGas = 0;
     xValueGas = xValueGasSign * 50;
@@ -538,7 +545,7 @@ void pp_findSpot_CB()
 
 void pp_parkToSpot_CB()
 {
-  if (arduinoDistances[RIGHT_SENSOR] < 5)
+  if (arduinoDistances[0] < 5)
   {
     xValueGas = 0;
     deactivateInput = false;
