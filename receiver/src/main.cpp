@@ -38,6 +38,10 @@
 #define DB_PIN_G 18
 #define DB_PIN_B 5
 
+#define BUZZER_PIN  23
+
+#define SENSOR_COUNT 6
+
 #define FRONT_SENSOR 0
 #define RIGHT_FRONT_SENSOR 1
 #define RIGHT_REAR_SENSOR 2
@@ -65,11 +69,12 @@
 void adjustInputs();
 Ticker adjustInputsTask(adjustInputs, SPEED_ADJUSTING_FREQ, 0, MILLIS); // Girişleri oku
 
+/*
 void pp_findSpot_CB();
 Ticker pp_findSpotTask(pp_findSpot_CB, 10, 0, MILLIS);
 
 void pp_parkToSpot_CB();
-Ticker pp_ParkToSpotTask(pp_parkToSpot_CB, 10, 0, MILLIS);
+Ticker pp_ParkToSpotTask(pp_parkToSpot_CB, 10, 0, MILLIS); */
 
 void emergencyLockdown();
 Ticker emergencyLockdownTask(emergencyLockdown, LOCKDOWN_TIME, 0, MILLIS); // Acil durum kapatma
@@ -82,6 +87,7 @@ void chargeCheck();
 Ticker chargeCheckTask(chargeCheck, 1000, 0, MILLIS); // Şarj kontrolü
 
 /*---------------------------------------------------------------------*/
+
 
 // pwm değerleri
 
@@ -125,10 +131,10 @@ bool deactivateInput = false;
 bool parallelParkingBool = false;
 bool assistedDrivingBool = false;
 
+
 float motorOffsets[4] = {0.98, 1.105, 0.930, 1.102};
 float motorOffsets_reverse[4] = {1.13, 1.2, 1.1, 1.25};
 
-#define SENSOR_COUNT 6
 byte arduinoDistances[SENSOR_COUNT];
 int safeDistance = 35;
 
@@ -164,6 +170,7 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
 void initESPNow();
 void lockdownCheck();
 void getArduinoData();
+//void assistedDriving();
 
 /*---------------------------------------------------------------------*/
 
@@ -176,7 +183,11 @@ void setPins()
   pinMode(DB_PIN_R, OUTPUT);
   pinMode(DB_PIN_G, OUTPUT);
   pinMode(DB_PIN_B, OUTPUT);
+  digitalWrite(DB_PIN_R, 0);
+  digitalWrite(DB_PIN_G, 0);
+  digitalWrite(DB_PIN_B, 0);
   pinMode(ENABLE_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(4, 0);
   digitalWrite(ENABLE_PIN, 1);
 
@@ -239,28 +250,23 @@ void setup()
   #endif
 
   setPins();
-  Serial2.begin(9600, SERIAL_8N1, 16, 17);
+  //Serial2.begin(9600, SERIAL_8N1, 16, 17);
   adjustInputsTask.start();
   initESPNow();
 }
 
 void loop()
 {
-  getArduinoData();
+  //getArduinoData();
   printConsoleTask.update();
   lockdownCheck();
   adjustInputsTask.update();
-  omniDrive();
-  if (pp_findSpotTask.state() == RUNNING)
-  {pp_findSpotTask.update();}
-  if (pp_ParkToSpotTask.state() == RUNNING)
-  {pp_ParkToSpotTask.update();}
-
-
   if (assistedDrivingBool)
   {
-    assistedDriving();
+    //assistedDriving();
   }
+  omniDrive();
+
 }
 
 /*---------------------------------------------------------------------*/
@@ -270,9 +276,9 @@ void loop()
 
 void getArduinoData()
 {
-  if (Serial2.available() >= 4)
+  if (Serial2.available() >= SENSOR_COUNT)
   {
-    Serial2.readBytes(arduinoDistances, 4);
+    Serial2.readBytes(arduinoDistances, SENSOR_COUNT);
     digitalWrite(DB_PIN_B, 1);
   }
   else
@@ -295,7 +301,7 @@ void printConsole()
     Serial.println(arduinoDistances[i]);
   }
 
-  /*
+
   Serial.print("det_xValueGas: ");
   Serial.println(det_xValueGas);
   Serial.print("det_xValueStr: ");
@@ -321,9 +327,6 @@ void printConsole()
   Serial.print("sin: ");
   Serial.println(-power * sin(angle * PI / 180));
 
-  Serial.print("chargeInfo: %");
-  Serial.println(chargeInfo); */
-
   Serial.println("-----------------------------");
 }
 
@@ -331,13 +334,12 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
   memcpy(&joystickData, incomingData, sizeof(joystickData));
 
-  if (!deactivateInput)
-  {
+
     xValueGas = map(joystickData.sent_xValueGas, 0, 1023, -255, 255);
     yValueGas = map(joystickData.sent_yValueGas, 0, 1023, -255, 255);
     xValueStr = map(joystickData.sent_xValueStr, 0, 1023, -255, 255);
     yValueStr = map(joystickData.sent_yValueStr, 0, 1023, -255, 255);
-  }
+  
 
   parallelParkingBool = joystickData.sent_parallelParking;
   assistedDrivingBool = joystickData.sent_assistedDriving;
@@ -471,15 +473,18 @@ void chargeCheck()
 }
 
 
-void dampenInput(int input, int index, bool sign)
+
+/*
+
+void dampenInput(int &input, int index, bool sign)
 {
   if (sign)
   {
-    input -= constrain((input * (2 / arduinoDistances[index])), 0, input);
+    input -= constrain((input * (15 / arduinoDistances[index])), 0, input);
   }
   else
   {
-    input += constrain((input * (2 / arduinoDistances[index])), input, 0);
+    input -= constrain((input * (15 / arduinoDistances[index])), input, 0);
   }
 
 }
@@ -487,23 +492,29 @@ void dampenInput(int input, int index, bool sign)
 
 void assistedDriving()
 {
-  for (int i = 0; i <= SENSOR_COUNT-1; i++)
+  for (int i = 0; i < SENSOR_COUNT; i++)
   {
     if (arduinoDistances[i] < safeDistance)
     {
       switch (i)
       {
         case 0:
-        dampenInput(yValueGas, i, true);
+        dampenInput(xValueGas, i, true);
+        break;
 
         case 1:
-        dampenInput(xValueGas, i, true);
-
         case 2:
-        dampenInput(yValueGas, i, false);
+        dampenInput(yValueGas, i, true);
+        break;
 
         case 3:
-        dampenInput(xValueGas, i,false);
+        dampenInput(xValueGas, i, false);
+        break;
+
+        case 4:
+        case 5:
+        dampenInput(yValueGas, i, false);
+        break;
       }
     }
   }
@@ -511,11 +522,22 @@ void assistedDriving()
 
 
 int xValueGasSign;
+byte parking_dir = 0; //0 sağ, 1 sol
 
 void startParallelParking()
 {
+  bool pp_available = false;
 
-  if ((abs(yValueGas) < 10) && (abs(xValueGas) <10))
+  for (int i = 0; i < SENSOR_COUNT; i++)
+  {
+    if (arduinoDistances[i] >= safeDistance && i != 0 && i != 3)
+    {
+      if (i == 1 || i == 2) {parking_dir = 0;}
+      else if (i == 4 && i == 5) {parking_dir = 1;}
+      pp_available = true;
+    }
+  }
+  if (!pp_available)
   {return;}
 
   else
@@ -551,4 +573,4 @@ void pp_parkToSpot_CB()
     deactivateInput = false;
     pp_ParkToSpotTask.stop();
   }
-}
+} */

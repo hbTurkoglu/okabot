@@ -20,8 +20,18 @@
 #define AD_BUTTON 23
 #define PP_BUTTON 22
 
+#define AD_LED 4
+#define PP_LED 13
+
 void checkButtonCB();
-Ticker checkButtonTicker(checkButtonCB, 50);
+Ticker checkButtonTicker(checkButtonCB, 100);
+
+void printConsole();
+Ticker printConsoleTiker(printConsole, 1000);
+
+void sendData();
+Ticker sendDataTicker(sendData, 50);
+
 
 bool assistedDrivingBool = false;
 bool assistedDrivingBoolReleased = false;
@@ -52,8 +62,8 @@ JoystickData joystickData;
 esp_now_peer_info_t peerInfo;
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  //Serial.print("\r\nLast Packet Send Status:\t");
+  //Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
 }
 
 /*---------------------------------------------------------------------*/
@@ -70,6 +80,7 @@ void sendData();
 void initESPNow() 
 {
   // Init ESP-NOW
+  WiFi.mode(WIFI_STA);
   if (esp_now_init() != ESP_OK) 
   {
     while (true)
@@ -94,7 +105,6 @@ void initESPNow()
     Serial.println("Failed to add peer");
     return;
   }
-  WiFi.mode(WIFI_STA);
 }
 
 
@@ -108,6 +118,9 @@ void setPins()
 
   pinMode(AD_BUTTON, INPUT);
   pinMode(PP_BUTTON, INPUT);
+
+  pinMode(PP_LED, OUTPUT);
+  pinMode(AD_LED, OUTPUT);
 }
 
 /*---------------------------------------------------------------------*/
@@ -125,12 +138,15 @@ void setup()
   initESPNow();
 
   checkButtonTicker.start();
+  printConsoleTiker.start();
+  sendDataTicker.start();
 }
 
 void loop()
 {
-  sendData();
+  sendDataTicker.update();
   checkButtonTicker.update();
+  printConsoleTiker.update();
 }
 
 
@@ -152,11 +168,13 @@ void checkButtonCB()
   {
     assistedDrivingBoolReleased = false;
     assistedDrivingBool = true;
+    digitalWrite(AD_LED, assistedDrivingBool);
   }
   else if (digitalRead(AD_BUTTON) == 1 && assistedDrivingBool && assistedDrivingBoolReleased)
   {
     assistedDrivingBoolReleased = false;
     assistedDrivingBool = false;
+    digitalWrite(AD_LED, assistedDrivingBool);
   }
 
 
@@ -166,15 +184,17 @@ void checkButtonCB()
     parallelParkingBoolReleased = true;
   }
 
-  if (digitalRead(PP_BUTTON) == 1 && !parallelParkingBool && assistedDrivingBoolReleased)
+  if (digitalRead(PP_BUTTON) == 1 && !parallelParkingBool && parallelParkingBoolReleased)
   {
     parallelParkingBoolReleased = false;
     parallelParkingBool = true;
+    digitalWrite(PP_LED, parallelParkingBool);
   }
-  else if (digitalRead(PP_BUTTON) == 1 && parallelParkingBool && assistedDrivingBoolReleased)
+  else if (digitalRead(PP_BUTTON) == 1 && parallelParkingBool && parallelParkingBoolReleased)
   {
     parallelParkingBoolReleased = false;
     parallelParkingBool = false;
+    digitalWrite(PP_LED, parallelParkingBool);
   }
 
 }
@@ -187,10 +207,10 @@ void sendData()
     yValueStr = analogRead(VRY_PIN_STR);
 
     //Verileri sıkıştır ve değişkenlere ata.
-    joystickData.sent_xValueGas = xValueGas + 57;
-    joystickData.sent_yValueGas = yValueGas + 57;
-    joystickData.sent_xValueStr = xValueStr + 57;
-    joystickData.sent_yValueStr = yValueStr + 57;
+    joystickData.sent_xValueGas = xValueGas + 52;
+    joystickData.sent_yValueGas = yValueGas + 52;
+    joystickData.sent_xValueStr = xValueStr + 52;
+    joystickData.sent_yValueStr = yValueStr + 52;
 
     joystickData.sent_assistedDriving = assistedDrivingBool;
     joystickData.sent_parallelParking = parallelParkingBool;
@@ -198,25 +218,36 @@ void sendData()
     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &joystickData, sizeof(joystickData));
     
     if (result == ESP_OK) {
-      Serial.println("Sent with success");
+      //Serial.println("Sent with success");
     }
     else {
-      Serial.println("Error sending the data");
+      //Serial.println("Error sending the data");
     }
 
     
-    #if DEBUG_MODE
-      Serial.print("xg = ");
-      Serial.println(joystickData.sent_xValueGas);
-      Serial.print("yg = ");
-      Serial.println(joystickData.sent_yValueGas);
-      Serial.print("xs = ");
-      Serial.println(joystickData.sent_xValueStr);
-      Serial.print("ys = ");
-      Serial.println(joystickData.sent_yValueStr);
-      Serial.println("\n");
-    #endif
+
+
     
+}
+
+
+void printConsole()
+{
+  #if DEBUG_MODE
+    Serial.print("xg = ");
+    Serial.println(joystickData.sent_xValueGas);
+    Serial.print("yg = ");
+    Serial.println(joystickData.sent_yValueGas);
+    Serial.print("xs = ");
+    Serial.println(joystickData.sent_xValueStr);
+    Serial.print("ys = ");
+    Serial.println(joystickData.sent_yValueStr);
+    Serial.print("AD = ");
+    Serial.println(joystickData.sent_assistedDriving);
+    Serial.print("PP = ");
+    Serial.println(joystickData.sent_parallelParking);
+    Serial.println("\n");
+  #endif
 }
 
 

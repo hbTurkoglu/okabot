@@ -6,7 +6,7 @@
 
 #define SENSOR_COUNT 6
 
-byte echoes[SENSOR_COUNT] = {3, 4, 5, 6, 7, 8};
+byte echoes[SENSOR_COUNT] = {3, 4, 5, 6, 7, 9};
 byte distances[SENSOR_COUNT] = {0, 0, 0, 0, 0, 0};
 
 
@@ -21,7 +21,7 @@ void setup()
 
   for(int i = 0; i < SENSOR_COUNT; i++)
   {
-    pinMode(echoes[i], OUTPUT);
+    pinMode(echoes[i], INPUT);
   }
 }
 
