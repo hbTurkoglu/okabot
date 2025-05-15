@@ -57,10 +57,10 @@
 #define SLOWDOWNZONE 40 // MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir.
 #define MOTION_START 10 // Büyüdükçe harekete daha erken başlar ama hassaslık azalır.
 
-#define SPEED_ADJUSTING_FREQ 1
-#define ACCELERATION 1
+#define SPEED_ADJUSTING_FREQ 1  //Küçüldükçe ivmelenme artar
+#define ACCELERATION 1  //Büyüdükçe ivmelenme artar
 
-#define LOCKDOWN_TIME 500
+#define LOCKDOWN_TIME 500 //Veri alımı zaman aşımı durumunda acildurum kapanması için beklenecek süre (ms).
 
 /*---------------------------------------------------------------------*/
 
@@ -69,19 +69,19 @@
 void adjustInputs();
 Ticker adjustInputsTask(adjustInputs, SPEED_ADJUSTING_FREQ, 0, MILLIS); // Girişleri oku
 
-/*
+
 void pp_findSpot_CB();
 Ticker pp_findSpotTask(pp_findSpot_CB, 10, 0, MILLIS);
 
 void pp_parkToSpot_CB();
-Ticker pp_ParkToSpotTask(pp_parkToSpot_CB, 10, 0, MILLIS); */
+Ticker pp_ParkToSpotTask(pp_parkToSpot_CB, 10, 0, MILLIS); 
 
 void emergencyLockdown();
 Ticker emergencyLockdownTask(emergencyLockdown, LOCKDOWN_TIME, 0, MILLIS); // Acil durum kapatma
 bool dataReceived = false;
 
 void printConsole();
-Ticker printConsoleTask(printConsole, 1500);
+Ticker printConsoleTask(printConsole, 500);
 
 void chargeCheck();
 Ticker chargeCheckTask(chargeCheck, 1000, 0, MILLIS); // Şarj kontrolü
@@ -148,7 +148,7 @@ unsigned long pp_spotEndTime;
 
 // Objeler.
 
-uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBC, 0x15, 0xF4}; // Kumanda mac adresi
+uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBD, 0x32, 0x0C}; // Kumanda mac adresi
 
 typedef struct
 {
@@ -170,7 +170,7 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
 void initESPNow();
 void lockdownCheck();
 void getArduinoData();
-//void assistedDriving();
+void assistedDriving();
 
 /*---------------------------------------------------------------------*/
 
@@ -250,14 +250,14 @@ void setup()
   #endif
 
   setPins();
-  //Serial2.begin(9600, SERIAL_8N1, 16, 17);
+  Serial2.begin(9600, SERIAL_8N1, 16, 17);
   adjustInputsTask.start();
   initESPNow();
 }
 
 void loop()
 {
-  //getArduinoData();
+  getArduinoData();
   printConsoleTask.update();
   lockdownCheck();
   adjustInputsTask.update();
@@ -280,10 +280,12 @@ void getArduinoData()
   {
     Serial2.readBytes(arduinoDistances, SENSOR_COUNT);
     digitalWrite(DB_PIN_B, 1);
+    //digitalWrite(2, 0);
   }
   else
   {
     digitalWrite(DB_PIN_B, 0);
+    //digitalWrite(2, 1);
   }
 }
 
@@ -296,12 +298,12 @@ void printConsole()
 
   for (int i = 0; i < SENSOR_COUNT; i++)
   {
-    Serial.print(i);
+    Serial.print(i+1);
     Serial.print(". Sensor: ");
     Serial.println(arduinoDistances[i]);
   }
 
-
+  /*
   Serial.print("det_xValueGas: ");
   Serial.println(det_xValueGas);
   Serial.print("det_xValueStr: ");
@@ -327,7 +329,7 @@ void printConsole()
   Serial.print("sin: ");
   Serial.println(-power * sin(angle * PI / 180));
 
-  Serial.println("-----------------------------");
+  Serial.println("-----------------------------");*/
 }
 
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
@@ -474,7 +476,7 @@ void chargeCheck()
 
 
 
-/*
+
 
 void dampenInput(int &input, int index, bool sign)
 {
@@ -573,4 +575,4 @@ void pp_parkToSpot_CB()
     deactivateInput = false;
     pp_ParkToSpotTask.stop();
   }
-} */
+} 

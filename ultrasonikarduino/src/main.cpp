@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Ticker.h>
 
 #define TRIG 2
 
@@ -11,8 +12,11 @@ byte distances[SENSOR_COUNT] = {0, 0, 0, 0, 0, 0};
 
 
 
-byte readDistance(int echo);
+void printConsole();
+void readDistance(int index);
 void scanSensors(int freq);
+
+Ticker printConsoleTask(printConsole, 1000);
 
 void setup() 
 {
@@ -23,24 +27,27 @@ void setup()
   {
     pinMode(echoes[i], INPUT);
   }
+
+  //printConsoleTask.start();
 }
 
 void loop() 
 {
-  scanSensors(1000);
+  scanSensors(100);
   Serial.write(distances, sizeof(distances));
+  //printConsoleTask.update();
 }
 
 void scanSensors(int freq)
 {
   for (int i = 0; i < SENSOR_COUNT; i++)
   {
-    distances[i] = readDistance(echoes[i]);
+    readDistance(i);
     delay(freq/SENSOR_COUNT);
   }
 }
 
-byte readDistance(int echo)
+void readDistance(int index)
 {
   digitalWrite(TRIG, LOW);
   delayMicroseconds(2);
@@ -48,10 +55,21 @@ byte readDistance(int echo)
   delayMicroseconds(10);
   digitalWrite(TRIG, LOW);
 
-  unsigned long duration = pulseIn(echo, HIGH);
+  unsigned long duration = pulseIn(echoes[index], HIGH);
   byte distance = constrain(((duration * SOUND_SPEED) / 2), 0, 40);
-  return distance;
+  //int distance = ((duration * SOUND_SPEED) / 2);
+  distances[index] = distance;
 }
 
 
-
+void printConsole()
+{
+  for (int i = 0; i < SENSOR_COUNT; i++)
+  {
+    Serial.print(i+1);
+    Serial.print(". Sensor Veri: ");
+    Serial.print(distances[i]);
+    Serial.println("cm");
+  }
+  Serial.println("---------------------------");
+}

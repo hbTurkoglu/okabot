@@ -24,7 +24,7 @@
 #define PP_LED 13
 
 void checkButtonCB();
-Ticker checkButtonTicker(checkButtonCB, 100);
+Ticker checkButtonTicker(checkButtonCB, 150);
 
 void printConsole();
 Ticker printConsoleTiker(printConsole, 1000);
@@ -48,7 +48,7 @@ int yValueGas = 0;
 int xValueStr = 0;
 int yValueStr = 0;
 
-uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBD, 0x32, 0x0C};
+uint8_t broadcastAddress[] = {0x08, 0xA6, 0xF7, 0xBC, 0x15, 0xF4};
 
 
 typedef struct JoystickData{
@@ -207,10 +207,11 @@ void sendData()
     yValueStr = analogRead(VRY_PIN_STR);
 
     //Verileri sıkıştır ve değişkenlere ata.
-    joystickData.sent_xValueGas = xValueGas + 52;
-    joystickData.sent_yValueGas = yValueGas + 52;
-    joystickData.sent_xValueStr = xValueStr + 52;
-    joystickData.sent_yValueStr = yValueStr + 52;
+    const byte joystickOffset = 52;
+    joystickData.sent_xValueGas = constrain(xValueGas + joystickOffset, 0, 1023);
+    joystickData.sent_yValueGas = constrain(yValueGas + joystickOffset - 6, 0, 1023);
+    joystickData.sent_xValueStr = constrain(xValueStr + joystickOffset + 15, 0, 1023);
+    joystickData.sent_yValueStr = constrain(yValueStr + joystickOffset, 0, 1023);
 
     joystickData.sent_assistedDriving = assistedDrivingBool;
     joystickData.sent_parallelParking = parallelParkingBool;
