@@ -40,7 +40,7 @@
 
 #define BUZZER_PIN  23
 
-#define SENSOR_COUNT 6
+#define SENSOR_COUNT 8
 
 #define FRONT_SENSOR 0
 #define RIGHT_FRONT_SENSOR 1
@@ -53,7 +53,7 @@
 
 // parametreler
 
-#define MAX_POWER 127
+#define MAX_POWER 80
 #define SLOWDOWNZONE 40 // MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir.
 #define MOTION_START 10 // Büyüdükçe harekete daha erken başlar ama hassaslık azalır.
 
@@ -81,7 +81,7 @@ Ticker emergencyLockdownTask(emergencyLockdown, LOCKDOWN_TIME, 0, MILLIS); // Ac
 bool dataReceived = false;
 
 void printConsole();
-Ticker printConsoleTask(printConsole, 500);
+Ticker printConsoleTask(printConsole, 2000);
 
 void chargeCheck();
 Ticker chargeCheckTask(chargeCheck, 1000, 0, MILLIS); // Şarj kontrolü
@@ -132,11 +132,11 @@ bool parallelParkingBool = false;
 bool assistedDrivingBool = false;
 
 
-float motorOffsets[4] = {0.98, 1.105, 0.930, 1.102};
-float motorOffsets_reverse[4] = {1.13, 1.2, 1.1, 1.25};
+float motorOffsets[4] = {1.008, 1.017, 1.074, 0.935};
+float motorOffsets_reverse[4] = {0.859, 0.828, 0.805, 0.885};
 
 byte arduinoDistances[SENSOR_COUNT];
-int safeDistance = 35;
+int safeDistance = 25;
 
 
 unsigned long pp_spotStartTime;
@@ -179,15 +179,16 @@ void assistedDriving();
 void setPins()
 {
   pinMode(4, OUTPUT);
-  pinMode(2, OUTPUT);
-  pinMode(DB_PIN_R, OUTPUT);
-  pinMode(DB_PIN_G, OUTPUT);
+  //pinMode(DB_PIN_R, OUTPUT);
+  //pinMode(DB_PIN_G, OUTPUT);
   pinMode(DB_PIN_B, OUTPUT);
+
+  pinMode(ENABLE_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+
   digitalWrite(DB_PIN_R, 0);
   digitalWrite(DB_PIN_G, 0);
   digitalWrite(DB_PIN_B, 0);
-  pinMode(ENABLE_PIN, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(4, 0);
   digitalWrite(ENABLE_PIN, 1);
 
@@ -263,7 +264,7 @@ void loop()
   adjustInputsTask.update();
   if (assistedDrivingBool)
   {
-    //assistedDriving();
+    assistedDriving();
   }
   omniDrive();
 
@@ -279,13 +280,23 @@ void getArduinoData()
   if (Serial2.available() >= SENSOR_COUNT)
   {
     Serial2.readBytes(arduinoDistances, SENSOR_COUNT);
-    digitalWrite(DB_PIN_B, 1);
-    //digitalWrite(2, 0);
-  }
-  else
-  {
-    digitalWrite(DB_PIN_B, 0);
-    //digitalWrite(2, 1);
+
+
+
+    for (int i = 0; i < SENSOR_COUNT; i++)
+    {
+      if (arduinoDistances[i] <= 0) {arduinoDistances[i] = 1;}
+
+
+      if (arduinoDistances[i] == 1 || arduinoDistances[i] > 40)
+      {
+        digitalWrite(DB_PIN_B, 0);
+      }
+      else
+      {
+        digitalWrite(DB_PIN_B, 1);
+      }
+    }
   }
 }
 
@@ -303,7 +314,7 @@ void printConsole()
     Serial.println(arduinoDistances[i]);
   }
 
-  /*
+  
   Serial.print("det_xValueGas: ");
   Serial.println(det_xValueGas);
   Serial.print("det_xValueStr: ");
@@ -329,7 +340,7 @@ void printConsole()
   Serial.print("sin: ");
   Serial.println(-power * sin(angle * PI / 180));
 
-  Serial.println("-----------------------------");*/
+  Serial.println("-----------------------------");
 }
 
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
@@ -482,11 +493,13 @@ void dampenInput(int &input, int index, bool sign)
 {
   if (sign)
   {
-    input -= constrain((input * (15 / arduinoDistances[index])), 0, input);
+    input -= (input * (15 / arduinoDistances[index]));
+    if (input < 0) {input =  0;}
   }
   else
   {
-    input -= constrain((input * (15 / arduinoDistances[index])), input, 0);
+    input -= (input * (15 / arduinoDistances[index]));
+    if (input > 0) {input = 0;}
   }
 
 }
@@ -506,15 +519,17 @@ void assistedDriving()
 
         case 1:
         case 2:
+        case 3:
         dampenInput(yValueGas, i, true);
         break;
 
-        case 3:
+        case 4:
         dampenInput(xValueGas, i, false);
         break;
 
-        case 4:
         case 5:
+        case 6:
+        case 7:
         dampenInput(yValueGas, i, false);
         break;
       }

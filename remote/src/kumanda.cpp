@@ -11,10 +11,10 @@
 
 
 //Joystick tanımlamaları.
-#define VRX_PIN_GAS 32//joystick pinleri analog
-#define VRY_PIN_GAS 33
-#define VRX_PIN_STR 34  
-#define VRY_PIN_STR 35
+#define VRX_PIN_GAS 34
+#define VRY_PIN_GAS 35
+#define VRX_PIN_STR 32
+#define VRY_PIN_STR 33
 
 
 #define AD_BUTTON 23
@@ -121,6 +121,11 @@ void setPins()
 
   pinMode(PP_LED, OUTPUT);
   pinMode(AD_LED, OUTPUT);
+
+  ledcSetup(0, 15000, 8);
+  ledcSetup(1, 15000, 8);
+  ledcAttachPin(PP_LED, 0);
+  ledcAttachPin(AD_LED, 1);
 }
 
 /*---------------------------------------------------------------------*/
@@ -168,13 +173,11 @@ void checkButtonCB()
   {
     assistedDrivingBoolReleased = false;
     assistedDrivingBool = true;
-    digitalWrite(AD_LED, assistedDrivingBool);
   }
   else if (digitalRead(AD_BUTTON) == 1 && assistedDrivingBool && assistedDrivingBoolReleased)
   {
     assistedDrivingBoolReleased = false;
     assistedDrivingBool = false;
-    digitalWrite(AD_LED, assistedDrivingBool);
   }
 
 
@@ -188,14 +191,22 @@ void checkButtonCB()
   {
     parallelParkingBoolReleased = false;
     parallelParkingBool = true;
-    digitalWrite(PP_LED, parallelParkingBool);
   }
   else if (digitalRead(PP_BUTTON) == 1 && parallelParkingBool && parallelParkingBoolReleased)
   {
     parallelParkingBoolReleased = false;
     parallelParkingBool = false;
-    digitalWrite(PP_LED, parallelParkingBool);
   }
+
+
+
+  if (assistedDrivingBool){ledcWrite(1, 5);}
+  else {ledcWrite(1, 0);}
+
+  if (parallelParkingBool){ledcWrite(0, 5);}
+  else {ledcWrite(0, 0);}
+
+
 
 }
 
@@ -207,11 +218,11 @@ void sendData()
     yValueStr = analogRead(VRY_PIN_STR);
 
     //Verileri sıkıştır ve değişkenlere ata.
-    const byte joystickOffset = 52;
-    joystickData.sent_xValueGas = constrain(xValueGas + joystickOffset, 0, 1023);
-    joystickData.sent_yValueGas = constrain(yValueGas + joystickOffset - 6, 0, 1023);
-    joystickData.sent_xValueStr = constrain(xValueStr + joystickOffset + 15, 0, 1023);
-    joystickData.sent_yValueStr = constrain(yValueStr + joystickOffset, 0, 1023);
+    const byte joystickOffset = 36;
+    joystickData.sent_xValueGas = constrain(xValueGas + joystickOffset +12, 0, 1023);
+    joystickData.sent_yValueGas = constrain(yValueGas + joystickOffset, 0, 1023);
+    joystickData.sent_xValueStr = constrain(xValueStr + joystickOffset, 0, 1023);
+    joystickData.sent_yValueStr = 512;//constrain(yValueStr + joystickOffset, 0, 1023);
 
     joystickData.sent_assistedDriving = assistedDrivingBool;
     joystickData.sent_parallelParking = parallelParkingBool;

@@ -5,10 +5,10 @@
 
 #define SOUND_SPEED 0.034
 
-#define SENSOR_COUNT 6
+#define SENSOR_COUNT 8
 
-byte echoes[SENSOR_COUNT] = {3, 4, 5, 6, 7, 9};
-byte distances[SENSOR_COUNT] = {0, 0, 0, 0, 0, 0};
+byte echoes[SENSOR_COUNT] = {10, 3, 4, 5, 6, 7, 8, 9};
+byte distances[SENSOR_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 
 
@@ -28,14 +28,14 @@ void setup()
     pinMode(echoes[i], INPUT);
   }
 
-  //printConsoleTask.start();
+  printConsoleTask.start();
 }
 
 void loop() 
 {
-  scanSensors(100);
+  scanSensors(500);
   Serial.write(distances, sizeof(distances));
-  //printConsoleTask.update();
+  printConsoleTask.update();
 }
 
 void scanSensors(int freq)
