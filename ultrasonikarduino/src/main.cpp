@@ -7,6 +7,10 @@
 
 #define SENSOR_COUNT 8
 
+#define DEBUG_MODE false
+
+#define SCAN_FREQ 500
+
 byte echoes[SENSOR_COUNT] = {10, 3, 4, 5, 6, 7, 8, 9};
 byte distances[SENSOR_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -28,14 +32,21 @@ void setup()
     pinMode(echoes[i], INPUT);
   }
 
+
+  #if DEBUG_MODE
   printConsoleTask.start();
+  #endif
 }
 
 void loop() 
 {
-  scanSensors(500);
+  scanSensors(SCAN_FREQ);
   Serial.write(distances, sizeof(distances));
+
+
+  #if DEBUG_MODE
   printConsoleTask.update();
+  #endif
 }
 
 void scanSensors(int freq)
@@ -57,7 +68,6 @@ void readDistance(int index)
 
   unsigned long duration = pulseIn(echoes[index], HIGH);
   byte distance = constrain(((duration * SOUND_SPEED) / 2), 0, 40);
-  //int distance = ((duration * SOUND_SPEED) / 2);
   distances[index] = distance;
 }
 

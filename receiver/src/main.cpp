@@ -13,7 +13,7 @@
 #define DEBUG_MODE true
 
 
-// Motor pin tanımlamaları.
+// Pin tanımlamaları.
 
 #define MOTOR_1_R_PWM 12
 #define MOTOR_1_L_PWM 14
@@ -37,10 +37,12 @@
 #define DB_PIN_R 2
 #define DB_PIN_G 18
 #define DB_PIN_B 5
+#define DB_PIN_RF 4
 
 #define BUZZER_PIN  23
 
-#define SENSOR_COUNT 8
+
+// İsim tanımlamaları.
 
 #define FRONT_SENSOR 0
 #define RIGHT_FRONT_SENSOR 1
@@ -49,11 +51,10 @@
 #define LEFT_FRONT_SENSOR 4
 #define LEFT_REAR_SENSOR 5
 
-#define CHASIS_MIDDLE_DIST 99999999
 
-// parametreler
+// Parametreler
 
-#define MAX_POWER 80
+#define MAX_POWER_PERCENT 50  // Motorların maksimum gücü (yüzde)
 #define SLOWDOWNZONE 40 // MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir.
 #define MOTION_START 10 // Büyüdükçe harekete daha erken başlar ama hassaslık azalır.
 
@@ -61,6 +62,12 @@
 #define ACCELERATION 1  //Büyüdükçe ivmelenme artar
 
 #define LOCKDOWN_TIME 500 //Veri alımı zaman aşımı durumunda acildurum kapanması için beklenecek süre (ms).
+
+#define SENSOR_COUNT 8  // Ultrasonik sensör sayısı
+#define CHASIS_MIDDLE_DIST 99999999 // Şasi ortası için bir referans değeri
+
+#define AD_MIN_DIST 15 // Assisted driving için minimum mesafe
+#define AD_MAX_DIST 35  // Assisted driving için maksimum mesafe
 
 /*---------------------------------------------------------------------*/
 
@@ -107,6 +114,8 @@ const int pwmChannel_3L = 5;
 
 const int pwmChannel_4R = 6;
 const int pwmChannel_4L = 7;
+
+int maxPwmPower = 0; // Motorların maksimum gücü (PWM değeri). Kod içinde hesaplanır.
 
 int xValueGas = 0, yValueGas = 0, xValueStr = 0, yValueStr = 0;
 
@@ -178,7 +187,7 @@ void assistedDriving();
 
 void setPins()
 {
-  pinMode(4, OUTPUT);
+  pinMode(DB_PIN_RF, OUTPUT);
   //pinMode(DB_PIN_R, OUTPUT);
   //pinMode(DB_PIN_G, OUTPUT);
   pinMode(DB_PIN_B, OUTPUT);
@@ -189,7 +198,7 @@ void setPins()
   digitalWrite(DB_PIN_R, 0);
   digitalWrite(DB_PIN_G, 0);
   digitalWrite(DB_PIN_B, 0);
-  digitalWrite(4, 0);
+  digitalWrite(DB_PIN_RF, 0);
   digitalWrite(ENABLE_PIN, 1);
 
   pinMode(12, OUTPUT);
@@ -225,18 +234,41 @@ void initESPNow()
   WiFi.mode(WIFI_STA);
   if (esp_now_init() != ESP_OK)
   {
-    while (true)
-    {
-      Serial.println("Error initializing ESP-NOW");
-      digitalWrite(4, 0);
-      delay(500);
-      digitalWrite(4, 1);
-      delay(500);
-    }
+    Serial.println("Error initializing ESP-NOW");
+    fatalError(DB_PIN_RF);
     return;
   }
   esp_now_register_recv_cb(esp_now_recv_cb_t(OnDataRecv));
   esp_wifi_set_max_tx_power(78);
+}
+
+
+void calculateMaxPwmPower()
+{
+  if (MAX_POWER_PERCENT > 100)
+  {
+    Serial.println("MAX_POWER_PERCENT is greater than 100.");
+    fatalError(DB_PIN_B);
+  }
+  else if (MAX_POWER_PERCENT < 0)
+  {
+    Serial.println("MAX_POWER_PERCENT is less than 0.");
+    fatalError(DB_PIN_B);
+  }
+
+  maxPwmPower = map(MAX_POWER_PERCENT, 0, 100, 0, 255);
+}
+
+void fatalError(int pinToBlink) // Hata durumunda pinleri yanıp söndür ve kodu sonsuz döngüye sokarak ilerleyen hasarı önler.
+{
+  Serial.println("Fatal error for some reason.");
+  while (true)
+  {
+    digitalWrite(pinToBlink, 0);
+    delay(500);
+    digitalWrite(pinToBlink, 1);
+    delay(500);
+  }
 }
 
 /*---------------------------------------------------------------------*/
@@ -254,6 +286,7 @@ void setup()
   Serial2.begin(9600, SERIAL_8N1, 16, 17);
   adjustInputsTask.start();
   initESPNow();
+  calculateMaxPwmPower();
 }
 
 void loop()
@@ -357,7 +390,7 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
   parallelParkingBool = joystickData.sent_parallelParking;
   assistedDrivingBool = joystickData.sent_assistedDriving;
 
-  digitalWrite(4, 1);
+  digitalWrite(DB_PIN_RF, 1);
   dataReceived = true;
 }
 
@@ -399,7 +432,7 @@ void outputPwmValues(int input, int channel_R, int channel_L, int middlePoint)
 
     if (input > middlePoint + SLOWDOWNZONE)
     {
-      R_value = map(input, middlePoint + SLOWDOWNZONE, 255, SLOWDOWNZONE, MAX_POWER);
+      R_value = map(input, middlePoint + SLOWDOWNZONE, 255, SLOWDOWNZONE, maxPwmPower);
     }
     else
     {
@@ -417,7 +450,7 @@ void outputPwmValues(int input, int channel_R, int channel_L, int middlePoint)
 
     if (input < middlePoint - SLOWDOWNZONE)
     {
-      L_value = map(input, -255, middlePoint - SLOWDOWNZONE, MAX_POWER, SLOWDOWNZONE);
+      L_value = map(input, -255, middlePoint - SLOWDOWNZONE, maxPwmPower, SLOWDOWNZONE);
     }
     else
     {
@@ -433,9 +466,9 @@ void emergencyLockdown()
   yValueGas = joystickIdleValue;
   xValueStr = joystickIdleValue;
   yValueStr = joystickIdleValue;
-  digitalWrite(4, 0);
+  digitalWrite(DB_PIN_RF, 0);
   Serial.println("\n-----------------------------");
-  Serial.println("Emergency lockdown activated.");
+  Serial.println("System is at emergeny lockdown.");
   Serial.println("-----------------------------");
 }
 
@@ -479,7 +512,7 @@ void omniDrive() // Şu fonksiyonu yazmaya giden zamanı bi ben bide halil biliy
   outputPwmValues(motor4, pwmChannel_4R, pwmChannel_4L, joystickIdleValue);
 }
 
-void chargeCheck()
+void chargeCheck()  //dertlerimizin en sonuncusu.
 {
   chargeValue = analogRead(BATTERY_PIN);
   chargeInfo = map(chargeValue, 3200, 4095, 0, 100); 
@@ -493,12 +526,14 @@ void dampenInput(int &input, int index, bool sign)
 {
   if (sign)
   {
-    input -= (input * (15 / arduinoDistances[index]));
-    if (input < 0) {input =  0;}
+    float scale = (arduinoDistances[index] - AD_MIN_DIST) / (AD_MAX_DIST - AD_MIN_DIST);
+    input *= scale;
+    if (input < 0) {input =  0;} // failsafe
   }
   else
   {
-    input -= (input * (15 / arduinoDistances[index]));
+    float scale = (arduinoDistances[index] - AD_MIN_DIST) / (AD_MAX_DIST - AD_MIN_DIST);
+    input *= scale;
     if (input > 0) {input = 0;}
   }
 
@@ -509,7 +544,7 @@ void assistedDriving()
 {
   for (int i = 0; i < SENSOR_COUNT; i++)
   {
-    if (arduinoDistances[i] < safeDistance)
+    if (arduinoDistances[i] <= AD_MAX_DIST)
     {
       switch (i)
       {
