@@ -9,7 +9,7 @@
 
 #define DEBUG_MODE false
 
-#define SCAN_FREQ 500
+#define SCAN_FREQ 300
 
 byte echoes[SENSOR_COUNT] = {10, 3, 4, 5, 6, 7, 8, 9};
 byte distances[SENSOR_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -20,7 +20,7 @@ void printConsole();
 void readDistance(int index);
 void scanSensors(int freq);
 
-Ticker printConsoleTask(printConsole, 1000);
+Ticker printConsoleTask(printConsole, 500);
 
 void setup() 
 {
@@ -41,7 +41,10 @@ void setup()
 void loop() 
 {
   scanSensors(SCAN_FREQ);
+
+  #if !DEBUG_MODE
   Serial.write(distances, sizeof(distances));
+  #endif
 
 
   #if DEBUG_MODE

@@ -67,7 +67,7 @@
 #define CHASIS_MIDDLE_DIST 99999999 // Şasi ortası için bir referans değeri
 
 #define AD_MIN_DIST 15 // Assisted driving için minimum mesafe
-#define AD_MAX_DIST 35  // Assisted driving için maksimum mesafe
+#define AD_MAX_DIST 40  // Assisted driving için maksimum mesafe
 
 /*---------------------------------------------------------------------*/
 
@@ -180,6 +180,7 @@ void initESPNow();
 void lockdownCheck();
 void getArduinoData();
 void assistedDriving();
+void fatalError(int pinToBlink);
 
 /*---------------------------------------------------------------------*/
 
@@ -316,7 +317,7 @@ void getArduinoData()
 
 
 
-    for (int i = 0; i < SENSOR_COUNT; i++)
+   /* for (int i = 0; i < SENSOR_COUNT; i++)
     {
       if (arduinoDistances[i] <= 0) {arduinoDistances[i] = 1;}
 
@@ -329,7 +330,7 @@ void getArduinoData()
       {
         digitalWrite(DB_PIN_B, 1);
       }
-    }
+    }*/
   }
 }
 
@@ -348,7 +349,7 @@ void printConsole()
   }
 
   
-  Serial.print("det_xValueGas: ");
+ /* Serial.print("det_xValueGas: ");
   Serial.println(det_xValueGas);
   Serial.print("det_xValueStr: ");
   Serial.println(det_xValueStr);
@@ -373,7 +374,7 @@ void printConsole()
   Serial.print("sin: ");
   Serial.println(-power * sin(angle * PI / 180));
 
-  Serial.println("-----------------------------");
+  Serial.println("-----------------------------"); */
 }
 
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
@@ -526,12 +527,14 @@ void dampenInput(int &input, int index, bool sign)
 {
   if (sign)
   {
+    if (input < 0) {return;}
     float scale = (arduinoDistances[index] - AD_MIN_DIST) / (AD_MAX_DIST - AD_MIN_DIST);
     input *= scale;
     if (input < 0) {input =  0;} // failsafe
   }
   else
   {
+    if (input > 0) {return;}
     float scale = (arduinoDistances[index] - AD_MIN_DIST) / (AD_MAX_DIST - AD_MIN_DIST);
     input *= scale;
     if (input > 0) {input = 0;}
@@ -555,7 +558,7 @@ void assistedDriving()
         case 1:
         case 2:
         case 3:
-        dampenInput(yValueGas, i, true);
+        dampenInput(yValueGas, i, false);
         break;
 
         case 4:
@@ -565,7 +568,7 @@ void assistedDriving()
         case 5:
         case 6:
         case 7:
-        dampenInput(yValueGas, i, false);
+        dampenInput(yValueGas, i, true);
         break;
       }
     }
