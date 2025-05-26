@@ -27,7 +27,7 @@ void checkButtonCB();
 Ticker checkButtonTicker(checkButtonCB, 150);
 
 void printConsole();
-Ticker printConsoleTiker(printConsole, 1000);
+Ticker printConsoleTicker(printConsole, 1000);
 
 void sendData();
 Ticker sendDataTicker(sendData, 50);
@@ -143,7 +143,7 @@ void setup()
   initESPNow();
 
   checkButtonTicker.start();
-  printConsoleTiker.start();
+  printConsoleTicker.start();
   sendDataTicker.start();
 }
 
@@ -151,7 +151,7 @@ void loop()
 {
   sendDataTicker.update();
   checkButtonTicker.update();
-  printConsoleTiker.update();
+  printConsoleTicker.update();
 }
 
 
@@ -229,16 +229,14 @@ void sendData()
 
     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &joystickData, sizeof(joystickData));
     
+    /*
     if (result == ESP_OK) {
-      //Serial.println("Sent with success");
+      Serial.println("Sent with success");
     }
     else {
-      //Serial.println("Error sending the data");
+      Serial.println("Error sending the data");
     }
-
-    
-
-
+    */
     
 }
 

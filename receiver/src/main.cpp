@@ -45,16 +45,19 @@
 // İsim tanımlamaları.
 
 #define FRONT_SENSOR 0
-#define RIGHT_FRONT_SENSOR 1
-#define RIGHT_REAR_SENSOR 2
-#define REAR_SENSOR 3
-#define LEFT_FRONT_SENSOR 4
-#define LEFT_REAR_SENSOR 5
+#define LEFT_FRONT_SENSOR 1
+#define LEFT_MIDDLE_SENSOR 2
+#define LEFT_REAR_SENSOR 3
+#define REAR_SENSOR 4
+#define RIGHT_FRONT_SENSOR 5
+#define RIGHT_MIDDLE_SENSOR 6
+#define RIGHT_REAR_SENSOR 7
 
 
 // Parametreler
 
 #define MAX_POWER_PERCENT 50  // Motorların maksimum gücü (yüzde)
+#define PP_SPEED 20 //255 üzerinden.
 #define SLOWDOWNZONE 40 // MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir.
 #define MOTION_START 10 // Büyüdükçe harekete daha erken başlar ama hassaslık azalır.
 
@@ -64,9 +67,8 @@
 #define LOCKDOWN_TIME 500 //Veri alımı zaman aşımı durumunda acildurum kapanması için beklenecek süre (ms).
 
 #define SENSOR_COUNT 8  // Ultrasonik sensör sayısı
-#define CHASIS_MIDDLE_DIST 99999999 // Şasi ortası için bir referans değeri
 
-#define AD_MIN_DIST 15 // Assisted driving için minimum mesafe
+#define AD_MIN_DIST 20 // Assisted driving için minimum mesafe
 #define AD_MAX_DIST 40  // Assisted driving için maksimum mesafe
 
 /*---------------------------------------------------------------------*/
@@ -296,10 +298,6 @@ void loop()
   printConsoleTask.update();
   lockdownCheck();
   adjustInputsTask.update();
-  if (assistedDrivingBool)
-  {
-    assistedDriving();
-  }
   omniDrive();
 
 }
@@ -317,7 +315,7 @@ void getArduinoData()
 
 
 
-   /* for (int i = 0; i < SENSOR_COUNT; i++)
+   for (int i = 0; i < SENSOR_COUNT; i++)
     {
       if (arduinoDistances[i] <= 0) {arduinoDistances[i] = 1;}
 
@@ -330,7 +328,7 @@ void getArduinoData()
       {
         digitalWrite(DB_PIN_B, 1);
       }
-    }*/
+    }
   }
 }
 
@@ -381,15 +379,19 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
   memcpy(&joystickData, incomingData, sizeof(joystickData));
 
-
+  if (!deactivateInput)
+  {
     xValueGas = map(joystickData.sent_xValueGas, 0, 1023, -255, 255);
     yValueGas = map(joystickData.sent_yValueGas, 0, 1023, -255, 255);
     xValueStr = map(joystickData.sent_xValueStr, 0, 1023, -255, 255);
     yValueStr = map(joystickData.sent_yValueStr, 0, 1023, -255, 255);
-  
+  }
 
   parallelParkingBool = joystickData.sent_parallelParking;
   assistedDrivingBool = joystickData.sent_assistedDriving;
+
+  if (assistedDrivingBool){assistedDriving();}  //Belki gerizekalıca.
+
 
   digitalWrite(DB_PIN_RF, 1);
   dataReceived = true;
@@ -468,9 +470,6 @@ void emergencyLockdown()
   xValueStr = joystickIdleValue;
   yValueStr = joystickIdleValue;
   digitalWrite(DB_PIN_RF, 0);
-  Serial.println("\n-----------------------------");
-  Serial.println("System is at emergeny lockdown.");
-  Serial.println("-----------------------------");
 }
 
 void lockdownCheck()
@@ -480,6 +479,9 @@ void lockdownCheck()
     if (emergencyLockdownTask.state() == STOPPED)
     {
       emergencyLockdownTask.start();
+      Serial.println("\n-----------------------------");
+      Serial.println("System is at emergeny lockdown.");
+      Serial.println("-----------------------------");
     }
     emergencyLockdownTask.update();
   }
@@ -488,6 +490,9 @@ void lockdownCheck()
     if (emergencyLockdownTask.state() == RUNNING)
     {
       emergencyLockdownTask.stop();
+      Serial.println("\n-----------------------------");
+      Serial.println("Eemergeny lockdown lifted.");
+      Serial.println("-----------------------------");
     }
   }
   dataReceived = false; //kontrol bool'unu sıfırla
@@ -528,16 +533,12 @@ void dampenInput(int &input, int index, bool sign)
   if (sign)
   {
     if (input < 0) {return;}
-    float scale = (arduinoDistances[index] - AD_MIN_DIST) / (AD_MAX_DIST - AD_MIN_DIST);
-    input *= scale;
-    if (input < 0) {input =  0;} // failsafe
+    input = 0;
   }
   else
   {
     if (input > 0) {return;}
-    float scale = (arduinoDistances[index] - AD_MIN_DIST) / (AD_MAX_DIST - AD_MIN_DIST);
-    input *= scale;
-    if (input > 0) {input = 0;}
+    input = 0;
   }
 
 }
@@ -551,23 +552,23 @@ void assistedDriving()
     {
       switch (i)
       {
-        case 0:
+        case FRONT_SENSOR:
         dampenInput(xValueGas, i, true);
         break;
 
-        case 1:
-        case 2:
-        case 3:
+        case LEFT_FRONT_SENSOR:
+        case LEFT_MIDDLE_SENSOR:
+        case LEFT_REAR_SENSOR:
         dampenInput(yValueGas, i, false);
         break;
 
-        case 4:
+        case REAR_SENSOR:
         dampenInput(xValueGas, i, false);
         break;
 
-        case 5:
-        case 6:
-        case 7:
+        case RIGHT_FRONT_SENSOR:
+        case RIGHT_MIDDLE_SENSOR:
+        case RIGHT_REAR_SENSOR:
         dampenInput(yValueGas, i, true);
         break;
       }
@@ -576,56 +577,69 @@ void assistedDriving()
 }
 
 
-int xValueGasSign;
 byte parking_dir = 0; //0 sağ, 1 sol
 
-void startParallelParking()
+void initializeParallelParking()
 {
   bool pp_available = false;
+  bool rightProximity = false;
+  bool leftProximity = false;
 
-  for (int i = 0; i < SENSOR_COUNT; i++)
+  for (int i = 0; i < SENSOR_COUNT; i++)  //Park yönü adaylarını belirle.
   {
-    if (arduinoDistances[i] >= safeDistance && i != 0 && i != 3)
+    if ((arduinoDistances[i] <= AD_MAX_DIST) && (i != FRONT_SENSOR) && (i != REAR_SENSOR))
     {
-      if (i == 1 || i == 2) {parking_dir = 0;}
-      else if (i == 4 && i == 5) {parking_dir = 1;}
-      pp_available = true;
+      if (i == RIGHT_FRONT_SENSOR || i == RIGHT_MIDDLE_SENSOR || i == RIGHT_REAR_SENSOR)
+      {
+        rightProximity = true;
+      }
+      else {leftProximity = true;}
     }
   }
-  if (!pp_available)
-  {return;}
 
-  else
+  if (rightProximity && leftProximity)  //Park yönü adaylarını değerlendir.
   {
-    deactivateInput = true; //bi ara kumandadan kontrolü zorla geri almanın bi yolunu ekle.
-    yValueGas = (abs(yValueGas) / yValueGas) * 50;
-    xValueGasSign = (abs(xValueGas) / xValueGas);
-    pp_findSpotTask.start();
-    pp_spotStartTime = millis();
+    //Park yönüne karar verilemedi, hem sağ hem solda aday var. Abort.
+    //[BUZZER]
+    return;
   }
+  else if (rightProximity) {parking_dir = 0;}
+  else if (leftProximity) {parking_dir = 1;}
+  else 
+  {
+    /*Park yönüne karar verilemedi, iki taraftada aday yok. Abort.*/
+    //[BUZZER]
+    return;
+  }
+
+  //Park yeri aramaya başla
+  deactivateInput = true; //bi ara kumandadan kontrolü zorla geri almanın bi yolunu ekle.
+  xValueGas = PP_SPEED;
+  yValueGas = 0;
+  xValueStr = 0;
+  pp_findSpotTask.start();
+  
 }
 
 
+void getParallelWithTheWall()
+{
+  //Duvarla paralel hale gel.
+}
+
+
+
+bool frontProximity = false;
+bool middleProximity = false;
+bool rearProximity = false;
 void pp_findSpot_CB()
 {
-  byte firstSensor;
-  byte secondSensor;
-
-  if (xValueGas > 0)
-  {
-    yValueGas = 0;
-    xValueGas = xValueGasSign * 50;
-    pp_ParkToSpotTask.start();
-    pp_findSpotTask.stop();
-  }
+  //3 değişkenin değerlerini sensörlerin yakınlığına göre ver,
+  //değerleri gözetim altında tut, 3 değerde aynı anda true olursa slota girmeyi başlat.
+  //herhangi bir değer true'dan false'a geçerse görevi iptal et.
 }
 
 void pp_parkToSpot_CB()
 {
-  if (arduinoDistances[0] < 5)
-  {
-    xValueGas = 0;
-    deactivateInput = false;
-    pp_ParkToSpotTask.stop();
-  }
+  //Sensör değerleri minimum mesafeye eşit olana kadar slotun içine doğru ilerle.
 } 

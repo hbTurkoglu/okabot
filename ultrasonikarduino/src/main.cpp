@@ -20,7 +20,7 @@ void printConsole();
 void readDistance(int index);
 void scanSensors(int freq);
 
-Ticker printConsoleTask(printConsole, 500);
+Ticker printConsoleTask(printConsole, SCAN_FREQ);
 
 void setup() 
 {
@@ -42,14 +42,13 @@ void loop()
 {
   scanSensors(SCAN_FREQ);
 
+
   #if !DEBUG_MODE
   Serial.write(distances, sizeof(distances));
-  #endif
-
-
-  #if DEBUG_MODE
+  #else
   printConsoleTask.update();
   #endif
+
 }
 
 void scanSensors(int freq)
