@@ -57,7 +57,7 @@
 // Parametreler
 
 #define MAX_POWER_PERCENT 50  // Motorların maksimum gücü (yüzde)
-#define PP_SPEED 20 //255 üzerinden.
+#define PP_SPEED 30 //255 üzerinden.
 #define SLOWDOWNZONE 40 // MAX_POWER 'dan küçük olmak zorunda. Yoksa... öngörülemeyen sonuçlar ortaya çıkabilir.
 #define MOTION_START 10 // Büyüdükçe harekete daha erken başlar ama hassaslık azalır.
 
@@ -69,7 +69,7 @@
 #define SENSOR_COUNT 8  // Ultrasonik sensör sayısı
 
 #define AD_MIN_DIST 20 // Assisted driving için minimum mesafe
-#define AD_MAX_DIST 40  // Assisted driving için maksimum mesafe
+#define AD_MAX_DIST 35  // Assisted driving için maksimum mesafe
 
 /*---------------------------------------------------------------------*/
 
@@ -141,10 +141,11 @@ float turn;
 bool deactivateInput = false;
 bool parallelParkingBool = false;
 bool assistedDrivingBool = false;
+bool currentlyParallelParking = false;
 
 
-float motorOffsets[4] = {1.008, 1.017, 1.074, 0.935};
-float motorOffsets_reverse[4] = {0.859, 0.828, 0.805, 0.885};
+float motorOffsets[4] = {0.95505, 1.0625, 0.9659, 1.02409};
+float motorOffsets_reverse[4] = {1.04938, 1.07594, 0.94444, 1.18055};
 
 byte arduinoDistances[SENSOR_COUNT];
 int safeDistance = 25;
@@ -183,6 +184,7 @@ void lockdownCheck();
 void getArduinoData();
 void assistedDriving();
 void fatalError(int pinToBlink);
+void initializeParallelParking();
 
 /*---------------------------------------------------------------------*/
 
@@ -295,10 +297,18 @@ void setup()
 void loop()
 {
   getArduinoData();
+  if (assistedDrivingBool){assistedDriving();}
+  if (parallelParkingBool && !currentlyParallelParking) {initializeParallelParking();}
   printConsoleTask.update();
   lockdownCheck();
   adjustInputsTask.update();
   omniDrive();
+
+  if (pp_findSpotTask.state() == RUNNING)
+  {pp_findSpotTask.update();}
+  if (pp_ParkToSpotTask.state() == RUNNING)
+  {pp_ParkToSpotTask.update();}
+
 
 }
 
@@ -346,8 +356,8 @@ void printConsole()
     Serial.println(arduinoDistances[i]);
   }
 
-  
- /* Serial.print("det_xValueGas: ");
+  /*
+  Serial.print("det_xValueGas: ");
   Serial.println(det_xValueGas);
   Serial.print("det_xValueStr: ");
   Serial.println(det_xValueStr);
@@ -379,18 +389,17 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
   memcpy(&joystickData, incomingData, sizeof(joystickData));
 
-  if (!deactivateInput)
-  {
+
     xValueGas = map(joystickData.sent_xValueGas, 0, 1023, -255, 255);
     yValueGas = map(joystickData.sent_yValueGas, 0, 1023, -255, 255);
     xValueStr = map(joystickData.sent_xValueStr, 0, 1023, -255, 255);
     yValueStr = map(joystickData.sent_yValueStr, 0, 1023, -255, 255);
-  }
+  
 
   parallelParkingBool = joystickData.sent_parallelParking;
   assistedDrivingBool = joystickData.sent_assistedDriving;
 
-  if (assistedDrivingBool){assistedDriving();}  //Belki gerizekalıca.
+  //Belki gerizekalıca.
 
 
   digitalWrite(DB_PIN_RF, 1);
@@ -479,9 +488,11 @@ void lockdownCheck()
     if (emergencyLockdownTask.state() == STOPPED)
     {
       emergencyLockdownTask.start();
+      /*
       Serial.println("\n-----------------------------");
       Serial.println("System is at emergeny lockdown.");
       Serial.println("-----------------------------");
+      */
     }
     emergencyLockdownTask.update();
   }
@@ -490,9 +501,11 @@ void lockdownCheck()
     if (emergencyLockdownTask.state() == RUNNING)
     {
       emergencyLockdownTask.stop();
+      /*
       Serial.println("\n-----------------------------");
       Serial.println("Eemergeny lockdown lifted.");
       Serial.println("-----------------------------");
+      */
     }
   }
   dataReceived = false; //kontrol bool'unu sıfırla
@@ -550,6 +563,8 @@ void assistedDriving()
   {
     if (arduinoDistances[i] <= AD_MAX_DIST)
     {
+
+      //Serial.println("a");
       switch (i)
       {
         case FRONT_SENSOR:
@@ -581,9 +596,10 @@ byte parking_dir = 0; //0 sağ, 1 sol
 
 void initializeParallelParking()
 {
-  bool pp_available = false;
+  //bool pp_available = false;
   bool rightProximity = false;
   bool leftProximity = false;
+  currentlyParallelParking = true;
 
   for (int i = 0; i < SENSOR_COUNT; i++)  //Park yönü adaylarını belirle.
   {
@@ -601,6 +617,7 @@ void initializeParallelParking()
   {
     //Park yönüne karar verilemedi, hem sağ hem solda aday var. Abort.
     //[BUZZER]
+    currentlyParallelParking = false;
     return;
   }
   else if (rightProximity) {parking_dir = 0;}
@@ -609,6 +626,7 @@ void initializeParallelParking()
   {
     /*Park yönüne karar verilemedi, iki taraftada aday yok. Abort.*/
     //[BUZZER]
+    currentlyParallelParking = false;
     return;
   }
 
@@ -629,17 +647,92 @@ void getParallelWithTheWall()
 
 
 
-bool frontProximity = false;
-bool middleProximity = false;
-bool rearProximity = false;
+bool frontProximity = true;
+bool middleProximity = true;
+bool rearProximity = true;
 void pp_findSpot_CB()
 {
-  //3 değişkenin değerlerini sensörlerin yakınlığına göre ver,
-  //değerleri gözetim altında tut, 3 değerde aynı anda true olursa slota girmeyi başlat.
-  //herhangi bir değer true'dan false'a geçerse görevi iptal et.
+  if (parking_dir == 0)
+  {
+    if (arduinoDistances[RIGHT_FRONT_SENSOR] > 35)
+    {frontProximity = false;}
+    if (arduinoDistances[RIGHT_MIDDLE_SENSOR] > 35)
+    {middleProximity = false;}
+    if (arduinoDistances[RIGHT_REAR_SENSOR] > 35)
+    {rearProximity = false;}
+  }
+  else if (parking_dir == 1)
+  {
+    if (arduinoDistances[LEFT_FRONT_SENSOR] > 35)
+    {frontProximity = false;}
+    if (arduinoDistances[LEFT_MIDDLE_SENSOR] > 35)
+    {middleProximity = false;}
+    if (arduinoDistances[LEFT_REAR_SENSOR] > 35)
+    {rearProximity = false;}
+  }
+
+
+    if (parking_dir == 0)
+  {
+    if (arduinoDistances[RIGHT_FRONT_SENSOR] < 35 && !frontProximity)
+    {frontProximity = true;
+      currentlyParallelParking = false;
+    return;}
+    if (arduinoDistances[RIGHT_MIDDLE_SENSOR] < 35 && !middleProximity)
+    {middleProximity = true;
+      currentlyParallelParking = false;
+    return;}
+    if (arduinoDistances[RIGHT_REAR_SENSOR] < 35 && !rearProximity)
+    {rearProximity = true;
+      currentlyParallelParking = false;
+    return;}
+  }
+  else if (parking_dir == 1)
+  {
+    if (arduinoDistances[LEFT_FRONT_SENSOR] < 35 && !frontProximity)
+    {frontProximity = true;
+      currentlyParallelParking = false;
+    return;}
+    if (arduinoDistances[LEFT_MIDDLE_SENSOR] < 35 && !middleProximity)
+    {middleProximity = true;
+      currentlyParallelParking = false;
+    return;}
+    if (arduinoDistances[LEFT_REAR_SENSOR] < 35 && !rearProximity)
+    {rearProximity = true;
+      currentlyParallelParking = false;
+    return;}
+  }
+  
+  if (!frontProximity && !middleProximity && !rearProximity)
+  {
+    xValueGas = 0;
+    if (parking_dir == 0) {yValueGas == PP_SPEED;}
+    else if (parking_dir == 1) {yValueGas == -PP_SPEED;}
+    pp_ParkToSpotTask.start(); //  :)
+    pp_findSpotTask.stop();
+  }
+
+
 }
 
 void pp_parkToSpot_CB()
 {
-  //Sensör değerleri minimum mesafeye eşit olana kadar slotun içine doğru ilerle.
+  if (parking_dir == 0)
+  {
+    if (arduinoDistances[RIGHT_FRONT_SENSOR] <= 20 || arduinoDistances[RIGHT_MIDDLE_SENSOR] <= 20 || arduinoDistances[RIGHT_REAR_SENSOR] <= 20)
+    {yValueGas = 0;
+    pp_ParkToSpotTask.stop();
+    currentlyParallelParking = false;
+    return;}
+  }
+  else if (parking_dir == 1)
+  {
+    if (arduinoDistances[LEFT_FRONT_SENSOR] <= 20 || arduinoDistances[LEFT_MIDDLE_SENSOR] <= 20 || arduinoDistances[LEFT_REAR_SENSOR] <= 20)
+    {yValueGas = 0;
+    pp_ParkToSpotTask.stop();
+    currentlyParallelParking = false;
+    return;}
+  }
+
+
 } 

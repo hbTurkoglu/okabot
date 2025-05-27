@@ -9,7 +9,7 @@
 
 #define DEBUG_MODE false
 
-#define SCAN_FREQ 300
+#define SCAN_FREQ 400
 
 byte echoes[SENSOR_COUNT] = {10, 3, 4, 5, 6, 7, 8, 9};
 byte distances[SENSOR_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0};
