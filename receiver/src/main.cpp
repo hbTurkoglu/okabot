@@ -41,17 +41,14 @@
 
 #define BUZZER_PIN  23
 
+#define RXD2 16
+#define TXD2 17
 
-// İsim tanımlamaları.
+#define ROS_TIMEOUT 500
 
-#define FRONT_SENSOR 0
-#define LEFT_FRONT_SENSOR 1
-#define LEFT_MIDDLE_SENSOR 2
-#define LEFT_REAR_SENSOR 3
-#define REAR_SENSOR 4
-#define RIGHT_FRONT_SENSOR 5
-#define RIGHT_MIDDLE_SENSOR 6
-#define RIGHT_REAR_SENSOR 7
+bool rosControlActive   = false;
+unsigned long lastRosTime = 0;
+
 
 
 // Parametreler
@@ -66,10 +63,7 @@
 
 #define LOCKDOWN_TIME 500 //Veri alımı zaman aşımı durumunda acildurum kapanması için beklenecek süre (ms).
 
-#define SENSOR_COUNT 8  // Ultrasonik sensör sayısı
 
-#define AD_MIN_DIST 20 // Assisted driving için minimum mesafe
-#define AD_MAX_DIST 35  // Assisted driving için maksimum mesafe
 
 /*---------------------------------------------------------------------*/
 
@@ -78,12 +72,6 @@
 void adjustInputs();
 Ticker adjustInputsTask(adjustInputs, SPEED_ADJUSTING_FREQ, 0, MILLIS); // Girişleri oku
 
-
-void pp_findSpot_CB();
-Ticker pp_findSpotTask(pp_findSpot_CB, 10, 0, MILLIS);
-
-void pp_parkToSpot_CB();
-Ticker pp_ParkToSpotTask(pp_parkToSpot_CB, 10, 0, MILLIS); 
 
 void emergencyLockdown();
 Ticker emergencyLockdownTask(emergencyLockdown, LOCKDOWN_TIME, 0, MILLIS); // Acil durum kapatma
@@ -123,6 +111,8 @@ int xValueGas = 0, yValueGas = 0, xValueStr = 0, yValueStr = 0;
 
 int det_xValueGas = 0, det_yValueGas = 0, det_xValueStr = 0, det_yValueStr = 0;
 
+int ros_xValueGas = 0, ros_yValueGas = 0, ros_xValueStr = 0, ros_yValueStr = 0;
+
 int joystickIdleValue = 0;
 
 int R_value;
@@ -139,20 +129,16 @@ float angle;
 float turn;
 
 bool deactivateInput = false;
-bool parallelParkingBool = false;
-bool assistedDrivingBool = false;
-bool currentlyParallelParking = false;
 
 
 float motorOffsets[4] = {0.95505, 1.0625, 0.9659, 1.02409};
 float motorOffsets_reverse[4] = {1.04938, 1.07594, 0.94444, 1.18055};
 
-byte arduinoDistances[SENSOR_COUNT];
-int safeDistance = 25;
 
+/*---------------------------------------------------------------------*/
 
-unsigned long pp_spotStartTime;
-unsigned long pp_spotEndTime;
+//Rosla ilgili şeyler
+
 
 
 
@@ -181,10 +167,8 @@ void omniDrive();
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
 void initESPNow();
 void lockdownCheck();
-void getArduinoData();
-void assistedDriving();
 void fatalError(int pinToBlink);
-void initializeParallelParking();
+void readJetsonSerial();
 
 /*---------------------------------------------------------------------*/
 
@@ -287,8 +271,9 @@ void setup()
     printConsoleTask.start();
   #endif
 
+  Serial2.begin(57600, SERIAL_8N1, RXD2, TXD2);
+
   setPins();
-  Serial2.begin(9600, SERIAL_8N1, 16, 17);
   adjustInputsTask.start();
   initESPNow();
   calculateMaxPwmPower();
@@ -296,19 +281,12 @@ void setup()
 
 void loop()
 {
-  getArduinoData();
-  if (assistedDrivingBool){assistedDriving();}
-  if (parallelParkingBool && !currentlyParallelParking) {initializeParallelParking();}
+
   printConsoleTask.update();
   lockdownCheck();
   adjustInputsTask.update();
   omniDrive();
-
-  if (pp_findSpotTask.state() == RUNNING)
-  {pp_findSpotTask.update();}
-  if (pp_ParkToSpotTask.state() == RUNNING)
-  {pp_ParkToSpotTask.update();}
-
+  readJetsonSerial();
 
 }
 
@@ -317,44 +295,11 @@ void loop()
 // Döngü fonksiyonları
 
 
-void getArduinoData()
-{
-  if (Serial2.available() >= SENSOR_COUNT)
-  {
-    Serial2.readBytes(arduinoDistances, SENSOR_COUNT);
-
-
-
-   for (int i = 0; i < SENSOR_COUNT; i++)
-    {
-      if (arduinoDistances[i] <= 0) {arduinoDistances[i] = 1;}
-
-
-      if (arduinoDistances[i] == 1 || arduinoDistances[i] > 40)
-      {
-        digitalWrite(DB_PIN_B, 0);
-      }
-      else
-      {
-        digitalWrite(DB_PIN_B, 1);
-      }
-    }
-  }
-}
-
-
 
 void printConsole()
 {
-  Serial.println("-----------------------------");
+  //Serial.println("-----------------------------");
 
-
-  for (int i = 0; i < SENSOR_COUNT; i++)
-  {
-    Serial.print(i+1);
-    Serial.print(". Sensor: ");
-    Serial.println(arduinoDistances[i]);
-  }
 
   /*
   Serial.print("det_xValueGas: ");
@@ -387,23 +332,19 @@ void printConsole()
 
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
-  memcpy(&joystickData, incomingData, sizeof(joystickData));
+    memcpy(&joystickData, incomingData, sizeof(joystickData));
 
+    // Only use joystick if Jetson is not controlling
+    if (!rosControlActive)
+    {
+        xValueGas = map(joystickData.sent_xValueGas, 0, 1023, -255, 255);
+        yValueGas = map(joystickData.sent_yValueGas, 0, 1023, -255, 255);
+        xValueStr = map(joystickData.sent_xValueStr, 0, 1023, -255, 255);
+        yValueStr = map(joystickData.sent_yValueStr, 0, 1023, -255, 255);
+    }
 
-    xValueGas = map(joystickData.sent_xValueGas, 0, 1023, -255, 255);
-    yValueGas = map(joystickData.sent_yValueGas, 0, 1023, -255, 255);
-    xValueStr = map(joystickData.sent_xValueStr, 0, 1023, -255, 255);
-    yValueStr = map(joystickData.sent_yValueStr, 0, 1023, -255, 255);
-  
-
-  parallelParkingBool = joystickData.sent_parallelParking;
-  assistedDrivingBool = joystickData.sent_assistedDriving;
-
-  //Belki gerizekalıca.
-
-
-  digitalWrite(DB_PIN_RF, 1);
-  dataReceived = true;
+    digitalWrite(DB_PIN_RF, 1);
+    dataReceived = true;
 }
 
 void linearlyRefineInputs(int &determinedValue, int currentValue, int Accel)
@@ -539,8 +480,6 @@ void chargeCheck()  //dertlerimizin en sonuncusu.
 
 
 
-
-
 void dampenInput(int &input, int index, bool sign)
 {
   if (sign)
@@ -557,182 +496,43 @@ void dampenInput(int &input, int index, bool sign)
 }
 
 
-void assistedDriving()
+//Ros fonksiyonları
+
+void readJetsonSerial()
 {
-  for (int i = 0; i < SENSOR_COUNT; i++)
-  {
-    if (arduinoDistances[i] <= AD_MAX_DIST)
+    if (Serial2.available())
     {
 
-      //Serial.println("a");
-      switch (i)
-      {
-        case FRONT_SENSOR:
-        dampenInput(xValueGas, i, true);
-        break;
+        String line = Serial2.readStringUntil('\n');
+        Serial.println(line);
+        line.trim();
 
-        case LEFT_FRONT_SENSOR:
-        case LEFT_MIDDLE_SENSOR:
-        case LEFT_REAR_SENSOR:
-        dampenInput(yValueGas, i, false);
-        break;
+        if (line.length() > 0)
+        {
+            int idx1 = line.indexOf(',');
+            int idx2 = line.indexOf(',', idx1 + 1);
 
-        case REAR_SENSOR:
-        dampenInput(xValueGas, i, false);
-        break;
+            if (idx1 > 0 && idx2 > 0)
+            {
+                xValueGas = constrain(line.substring(0, idx1).toInt(),        -255, 255);
+                yValueGas = constrain(line.substring(idx1+1, idx2).toInt(),   -255, 255);
+                xValueStr = constrain(line.substring(idx2+1).toInt(),         -255, 255);
+                yValueStr = 0;
 
-        case RIGHT_FRONT_SENSOR:
-        case RIGHT_MIDDLE_SENSOR:
-        case RIGHT_REAR_SENSOR:
-        dampenInput(yValueGas, i, true);
-        break;
-      }
+                rosControlActive = true;
+                lastRosTime      = millis();
+                dataReceived     = true;  // prevents emergency lockdown
+            }
+        }
     }
-  }
-}
 
-
-byte parking_dir = 0; //0 sağ, 1 sol
-
-void initializeParallelParking()
-{
-  //bool pp_available = false;
-  bool rightProximity = false;
-  bool leftProximity = false;
-  currentlyParallelParking = true;
-
-  for (int i = 0; i < SENSOR_COUNT; i++)  //Park yönü adaylarını belirle.
-  {
-    if ((arduinoDistances[i] <= AD_MAX_DIST) && (i != FRONT_SENSOR) && (i != REAR_SENSOR))
+    // If no data for ROS_TIMEOUT ms, fall back to joystick
+    if (rosControlActive && (millis() - lastRosTime > ROS_TIMEOUT))
     {
-      if (i == RIGHT_FRONT_SENSOR || i == RIGHT_MIDDLE_SENSOR || i == RIGHT_REAR_SENSOR)
-      {
-        rightProximity = true;
-      }
-      else {leftProximity = true;}
+        rosControlActive = false;
+        xValueGas = 0;
+        yValueGas = 0;
+        xValueStr = 0;
+        yValueStr = 0;
     }
-  }
-
-  if (rightProximity && leftProximity)  //Park yönü adaylarını değerlendir.
-  {
-    //Park yönüne karar verilemedi, hem sağ hem solda aday var. Abort.
-    //[BUZZER]
-    currentlyParallelParking = false;
-    return;
-  }
-  else if (rightProximity) {parking_dir = 0;}
-  else if (leftProximity) {parking_dir = 1;}
-  else 
-  {
-    /*Park yönüne karar verilemedi, iki taraftada aday yok. Abort.*/
-    //[BUZZER]
-    currentlyParallelParking = false;
-    return;
-  }
-
-  //Park yeri aramaya başla
-  deactivateInput = true; //bi ara kumandadan kontrolü zorla geri almanın bi yolunu ekle.
-  xValueGas = PP_SPEED;
-  yValueGas = 0;
-  xValueStr = 0;
-  pp_findSpotTask.start();
-  
 }
-
-
-void getParallelWithTheWall()
-{
-  //Duvarla paralel hale gel.
-}
-
-
-
-bool frontProximity = true;
-bool middleProximity = true;
-bool rearProximity = true;
-void pp_findSpot_CB()
-{
-  if (parking_dir == 0)
-  {
-    if (arduinoDistances[RIGHT_FRONT_SENSOR] > 35)
-    {frontProximity = false;}
-    if (arduinoDistances[RIGHT_MIDDLE_SENSOR] > 35)
-    {middleProximity = false;}
-    if (arduinoDistances[RIGHT_REAR_SENSOR] > 35)
-    {rearProximity = false;}
-  }
-  else if (parking_dir == 1)
-  {
-    if (arduinoDistances[LEFT_FRONT_SENSOR] > 35)
-    {frontProximity = false;}
-    if (arduinoDistances[LEFT_MIDDLE_SENSOR] > 35)
-    {middleProximity = false;}
-    if (arduinoDistances[LEFT_REAR_SENSOR] > 35)
-    {rearProximity = false;}
-  }
-
-
-    if (parking_dir == 0)
-  {
-    if (arduinoDistances[RIGHT_FRONT_SENSOR] < 35 && !frontProximity)
-    {frontProximity = true;
-      currentlyParallelParking = false;
-    return;}
-    if (arduinoDistances[RIGHT_MIDDLE_SENSOR] < 35 && !middleProximity)
-    {middleProximity = true;
-      currentlyParallelParking = false;
-    return;}
-    if (arduinoDistances[RIGHT_REAR_SENSOR] < 35 && !rearProximity)
-    {rearProximity = true;
-      currentlyParallelParking = false;
-    return;}
-  }
-  else if (parking_dir == 1)
-  {
-    if (arduinoDistances[LEFT_FRONT_SENSOR] < 35 && !frontProximity)
-    {frontProximity = true;
-      currentlyParallelParking = false;
-    return;}
-    if (arduinoDistances[LEFT_MIDDLE_SENSOR] < 35 && !middleProximity)
-    {middleProximity = true;
-      currentlyParallelParking = false;
-    return;}
-    if (arduinoDistances[LEFT_REAR_SENSOR] < 35 && !rearProximity)
-    {rearProximity = true;
-      currentlyParallelParking = false;
-    return;}
-  }
-  
-  if (!frontProximity && !middleProximity && !rearProximity)
-  {
-    xValueGas = 0;
-    if (parking_dir == 0) {yValueGas == PP_SPEED;}
-    else if (parking_dir == 1) {yValueGas == -PP_SPEED;}
-    pp_ParkToSpotTask.start(); //  :)
-    pp_findSpotTask.stop();
-  }
-
-
-}
-
-void pp_parkToSpot_CB()
-{
-  if (parking_dir == 0)
-  {
-    if (arduinoDistances[RIGHT_FRONT_SENSOR] <= 20 || arduinoDistances[RIGHT_MIDDLE_SENSOR] <= 20 || arduinoDistances[RIGHT_REAR_SENSOR] <= 20)
-    {yValueGas = 0;
-    pp_ParkToSpotTask.stop();
-    currentlyParallelParking = false;
-    return;}
-  }
-  else if (parking_dir == 1)
-  {
-    if (arduinoDistances[LEFT_FRONT_SENSOR] <= 20 || arduinoDistances[LEFT_MIDDLE_SENSOR] <= 20 || arduinoDistances[LEFT_REAR_SENSOR] <= 20)
-    {yValueGas = 0;
-    pp_ParkToSpotTask.stop();
-    currentlyParallelParking = false;
-    return;}
-  }
-
-
-} 
