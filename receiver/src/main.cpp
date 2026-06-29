@@ -10,7 +10,7 @@
 
 /*---------------------------------------------------------------------*/
 
-#define DEBUG_MODE true
+#define DEBUG_MODE false
 
 
 // Pin tanımlamaları.
@@ -267,11 +267,12 @@ void fatalError(int pinToBlink) // Hata durumunda pinleri yanıp söndür ve kod
 void setup()
 {
   #if DEBUG_MODE
-    Serial.begin(9600);
-    printConsoleTask.start();
+  printConsoleTask.start();
   #endif
-
-  Serial2.begin(57600, SERIAL_8N1, RXD2, TXD2);
+  
+  Serial.begin(57600);
+  Serial.println("Esp32 ready");
+  //Serial2.begin(57600, SERIAL_8N1, RXD2, TXD2);
 
   setPins();
   adjustInputsTask.start();
@@ -500,10 +501,11 @@ void dampenInput(int &input, int index, bool sign)
 
 void readJetsonSerial()
 {
-    if (Serial2.available())
+    if (Serial.available())
     {
 
-        String line = Serial2.readStringUntil('\n');
+        String line = Serial.readStringUntil('\n');
+        Serial.print("data esp taken:");
         Serial.println(line);
         line.trim();
 
